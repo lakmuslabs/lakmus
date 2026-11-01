@@ -39,13 +39,16 @@ from lakmus.results.models import (
 )
 from lakmus.results.statistics import percentile
 from lakmus.scorers import Case, PairOutputs, Score
-from lakmus.targets.base import RenderedCase, Target, TargetError, TargetOutput
+from lakmus.targets.base import RenderedCase, Target, TargetError, TargetOutput, redact
 from lakmus.targets.pricing import ModelPrice
 
 DEFAULT_EARLY_ABORT = 10
 
 Clock = Callable[[], datetime]
 Sleep = Callable[[float], Awaitable[None]]
+Progress = Callable[[int, int], None]
+"""Units finished, units planned. Called once per finished unit, from the loop's own task, so an
+implementation that blocks holds the run up."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +62,11 @@ class AnswerRecord:
     output: TargetOutput
     cached: bool
     attempts: int
+    prompt: str | None = None
+    """The text the target was sent, present only under `keep_prompts`.
+
+    Absent by default because a record of five thousand prompts is five thousand prompts in a
+    file people share, and ADR 0009 settled that the digest is what identifies an input."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,13 +142,15 @@ async def execute(
     early_abort: int = DEFAULT_EARLY_ABORT,
     time_limit_s: float | None = None,
     tool_version: str = "",
+    keep_prompts: bool = False,
+    progress: Progress | None = None,
 ) -> EngineResult:
     """Run the plan against the target. The target is already set up by the caller."""
     store = cache if cache is not None else NullCache()
     retries = policy if policy is not None else RetryPolicy()
-    progress = _Progress(early_abort=early_abort)
+    counter = _Progress(early_abort=early_abort)
     if stop is not None:
-        progress.stop = stop
+        counter.stop = stop
 
     started_at = clock()
     # Drawn before anything else touches `entropy`: a run id that depended on how many retries
@@ -158,12 +168,12 @@ async def execute(
     done: list[tuple[int, int, CaseRecord]] = []
 
     def should_stop() -> bool:
-        if progress.interrupted:
+        if counter.interrupted:
             return True
         if deadline is not None and clock().timestamp() >= deadline:
             # Out of time: stop taking new work and keep what is answered. There is no default
             # limit, because a large suite legitimately runs for hours.
-            progress.stop.set()
+            counter.stop.set()
             return True
         return False
 
@@ -178,7 +188,11 @@ async def execute(
         """
         nonlocal taken
         while True:
-            if should_stop() or taken >= len(units):
+            # Work exhausted is checked first, and deliberately: `should_stop` reads the clock and
+            # sets the stop event when the deadline has gone, so asking it after the last unit had
+            # already been taken stamped a run that completed every case as interrupted — losing
+            # the verdict of a run whose final call simply returned after the limit.
+            if taken >= len(units) or should_stop():
                 return
             position, case, repeat = units[taken]
             taken += 1
@@ -193,9 +207,12 @@ async def execute(
                 entropy=entropy,
                 target_digest=target_digest,
                 stopping=should_stop,
+                keep_prompts=keep_prompts,
             )
             done.append((position, repeat, record))
-            progress.finished(scored=record.scored)
+            counter.finished(scored=record.scored)
+            if progress is not None:
+                progress(len(done), len(units))
 
     workers = max(1, min(plan.config.concurrency, len(units)))
     try:
@@ -213,7 +230,7 @@ async def execute(
     records = tuple(record for _, _, record in sorted(done, key=lambda item: (item[0], item[1])))
 
     return EngineResult(
-        aborted=progress.aborted,
+        aborted=counter.aborted,
         run=_build_run(
             plan,
             records,
@@ -221,7 +238,7 @@ async def execute(
             created_at=started_at,
             run_id=run_id,
             tool_version=tool_version,
-            interrupted=progress.interrupted,
+            interrupted=counter.interrupted,
         ),
         cases=records,
     )
@@ -239,6 +256,7 @@ async def _one_unit(
     entropy: Random,
     target_digest: str,
     stopping: Callable[[], bool],
+    keep_prompts: bool,
 ) -> CaseRecord:
     try:
         rendered = plan.renderer.pair(case) if plan.arity == "pair" else plan.renderer.single(case)
@@ -267,6 +285,7 @@ async def _one_unit(
             target_digest=target_digest,
             timeout_s=plan.config.timeout_s,
             stopping=stopping,
+            keep_prompts=keep_prompts,
         )
         for each in rendered
     ]
@@ -290,6 +309,7 @@ async def _answer(
     target_digest: str,
     timeout_s: int,
     stopping: Callable[[], bool],
+    keep_prompts: bool,
 ) -> AnswerRecord:
     key = cache_key(target_digest=target_digest, input_sha256=rendered.sha256, repeat=repeat)
     hit = await asyncio.to_thread(store.get, key)
@@ -302,6 +322,7 @@ async def _answer(
             output=hit,
             cached=True,
             attempts=0,
+            prompt=rendered.prompt if keep_prompts else None,
         )
 
     output, attempts = await _call_with_retries(
@@ -322,6 +343,7 @@ async def _answer(
         output=output,
         cached=False,
         attempts=attempts,
+        prompt=rendered.prompt if keep_prompts else None,
     )
 
 
@@ -369,7 +391,10 @@ async def _call_with_retries(
             latency_ms=0,
             error=TargetError(
                 kind="timeout" if isinstance(last, _TimedOut) else _kind_of(last),
-                message=str(last) if last else "the target did not answer",
+                # Redacted here as well as at each adapter's raise site. This is the one point
+                # every adapter passes through, including one installed from another package, and
+                # the message reaches the cases file, which is published surface.
+                message=redact(str(last)) if last else "the target did not answer",
                 attempts=spent,
             ),
         ),

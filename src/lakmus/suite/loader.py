@@ -20,7 +20,7 @@ import importlib.util
 import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
@@ -71,6 +71,14 @@ class Suite:
     inputs_sha256: str
     content_sha256: str
     case_ids: tuple[str, ...]
+    scorers: "Mapping[str, ScorerSpec]" = field(default_factory=dict)
+    """Each metric's resolved scorer, built-in or the suite's own.
+
+    Validation resolves these in order to check a metric's options and the arity of the metric
+    list, so a caller that then has to resolve them again would import the suite's modules a
+    second time, ask for consent a second time, and get a second chance to disagree with what was
+    validated. Empty when the caller did not inject the built-in registry.
+    """
 
 
 def load(
@@ -159,6 +167,7 @@ def inspect(
         inputs_sha256=hashing.inputs_sha256(root, manifest),
         content_sha256=hashing.content_sha256(root, manifest),
         case_ids=case_ids,
+        scorers={**resolved, **from_suite},
     )
 
 
@@ -303,14 +312,14 @@ def _check_paths(root: Path, manifest: Manifest) -> list[Finding]:
     findings: list[Finding] = []
     resolved_root = root.resolve()
 
-    for field, relative in declared_paths(manifest):
+    for declared, relative in declared_paths(manifest):
         target = root / relative
         if not target.is_file():
             what = "is a directory" if target.is_dir() else "does not exist"
             findings.append(
                 Finding(
                     code=Code.FILE_MISSING,
-                    location=f"{MANIFEST_FILENAME}: {field}",
+                    location=f"{MANIFEST_FILENAME}: {declared}",
                     message=f'"{relative}" {what}; a file is required.',
                 )
             )
@@ -319,7 +328,7 @@ def _check_paths(root: Path, manifest: Manifest) -> list[Finding]:
             findings.append(
                 Finding(
                     code=Code.PATH_ESCAPES_SUITE,
-                    location=f"{MANIFEST_FILENAME}: {field}",
+                    location=f"{MANIFEST_FILENAME}: {declared}",
                     message=f'"{relative}" resolves outside the suite.',
                 )
             )
@@ -467,14 +476,15 @@ def _check_cases(root: Path, manifest: Manifest, findings: list[Finding]) -> tup
             continue
         first_seen[identifier] = number
 
-        for field in grouped_by:
-            if field not in case:
-                metric = next(m.id for m in manifest.metrics if field in m.group_by)
+        for grouping in grouped_by:
+            if grouping not in case:
+                metric = next(m.id for m in manifest.metrics if grouping in m.group_by)
                 findings.append(
                     Finding(
                         code=Code.CASE_MISSING_GROUP_FIELD,
                         location=location,
-                        message=f'case has no field "{field}", which metric "{metric}" groups by.',
+                        message=f'case has no field "{grouping}", which metric "{metric}" '
+                        f"groups by.",
                     )
                 )
 

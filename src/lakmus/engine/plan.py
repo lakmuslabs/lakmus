@@ -67,13 +67,18 @@ class RunPlan:
 def plan(
     suite: Suite,
     *,
-    specs: Mapping[str, ScorerSpec],
+    specs: Mapping[str, ScorerSpec] | None = None,
     overrides: Mapping[str, Any] | None = None,
     concurrency: int = DEFAULT_CONCURRENCY,
     bootstrap_resamples: int = RESAMPLES,
 ) -> RunPlan:
-    """Turn a validated suite into a run that can be executed, or refuse it."""
+    """Turn a validated suite into a run that can be executed, or refuse it.
+
+    `specs` defaults to the scorers the loader resolved while validating this suite, which is what
+    a caller wants unless it is a test pinning one scorer.
+    """
     manifest = suite.manifest
+    specs = suite.scorers if specs is None else specs
     missing = sorted(metric.id for metric in manifest.metrics if metric.id not in specs)
     if missing:
         raise TargetConfigError(

@@ -1,8 +1,8 @@
 """The dependency rule, enforced rather than documented.
 
-`suite`, `targets`, `scorers` and `results` describe data and talk to the outside world; `engine`
-orchestrates them and `cli` drives it. An import in the other direction turns a layered design into
-a cycle, and it costs nothing to catch here instead of in review.
+`suite`, `targets`, `scorers`, `results` and `report` describe data, render it, or talk to the
+outside world; `engine` orchestrates them and `cli` drives it. An import in the other direction
+turns a layered design into a cycle, and it costs nothing to catch here instead of in review.
 """
 
 import ast
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-LOWER_PACKAGES = ("suite", "targets", "scorers", "results")
+LOWER_PACKAGES = ("suite", "targets", "scorers", "results", "report")
 UPPER_PACKAGES = ("lakmus.engine", "lakmus.cli")
 
 
@@ -61,3 +61,20 @@ def test_every_package_named_in_the_rule_exists() -> None:
         if not (SRC / "lakmus" / name / "__init__.py").is_file()
     ]
     assert not missing
+
+
+def test_the_engine_does_not_import_the_report() -> None:
+    """ADR 0010: the CLI renders the HTML and hands the string to the writer.
+
+    The writer owns the order the three files are written in, and it lives in `engine` because an
+    answer embeds a `TargetOutput` that `results` cannot import back. That is the whole of the
+    dependency it needs; reaching for `report` as well would make the engine responsible for how a
+    run is presented.
+    """
+    offenders = [
+        f"{path.relative_to(SRC)} imports {name}"
+        for path in sorted((SRC / "lakmus" / "engine").rglob("*.py"))
+        for name in sorted(_imports_of(path))
+        if name == "lakmus.report" or name.startswith("lakmus.report.")
+    ]
+    assert not offenders, "\n".join(offenders)

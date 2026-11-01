@@ -1,59 +1,14 @@
 """`lakmus validate`."""
 
-import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from lakmus.cli import consent
 from lakmus.errors import ExitCode, Finding
 from lakmus.scorers import BUILTIN_SCORERS
-from lakmus.suite.loader import SuiteCodeConsent
 from lakmus.suite.loader import validate as validate_suite
-
-
-def _notice(message: str) -> None:
-    typer.secho(message, err=True, fg=typer.colors.YELLOW)
-
-
-def _skipped(modules: tuple[str, ...], reason: str) -> None:
-    listed = ", ".join(modules)
-    _notice(f"Not checking {len(modules)} scorer module(s) ({listed}): {reason}")
-
-
-def _consent(*, yes: bool, no_code: bool) -> SuiteCodeConsent:
-    """Decide, once, whether a suite's own Python may be imported.
-
-    The decision is handed to the loader rather than taken before it, so that the question is
-    asked only when there is something to import and the answer names the real modules.
-    """
-    if no_code:
-
-        def refuse(modules: tuple[str, ...]) -> bool:
-            _skipped(modules, "--no-code was given.")
-            return False
-
-        return refuse
-
-    if yes:
-        return True
-
-    def ask(modules: tuple[str, ...]) -> bool:
-        if not sys.stdin.isatty():
-            _skipped(
-                modules,
-                "importing them runs the suite author's code and there is no terminal to ask at. "
-                "Pass --yes to allow it, or --no-code to say so explicitly.",
-            )
-            return False
-        listed = ", ".join(modules)
-        return typer.confirm(
-            f"Import {len(modules)} scorer module(s) from this suite ({listed})? "
-            "This runs its author's code",
-            default=False,
-        )
-
-    return ask
 
 
 def validate(
@@ -67,13 +22,9 @@ def validate(
     no_code: Annotated[bool, typer.Option("--no-code", help="Never import suite scorers.")] = False,
 ) -> None:
     """Check a suite against the format it declares, and report every problem found."""
-    if yes and no_code:
-        typer.secho("--yes and --no-code contradict each other.", err=True, fg=typer.colors.RED)
-        raise typer.Exit(ExitCode.USAGE)
-
     findings = validate_suite(
         path,
-        run_suite_code=_consent(yes=yes, no_code=no_code),
+        run_suite_code=consent.build(yes=yes, no_code=no_code),
         scorers=BUILTIN_SCORERS,
     )
     _report(path, findings)

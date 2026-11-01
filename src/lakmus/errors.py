@@ -97,6 +97,17 @@ class TargetConfigError(LakmusError):
     exit_code = ExitCode.USAGE
 
 
+class OutputRefused(LakmusError):
+    """The directory a run would be written to cannot be used.
+
+    A usage error rather than a runtime one: it is settled before the first call, and the answer
+    is another `--out`. Refusing a directory that already holds a run is deliberate — overwriting
+    one silently is how evidence disappears.
+    """
+
+    exit_code = ExitCode.USAGE
+
+
 class RetryableTargetError(LakmusError):
     """Base class for target failures the engine retries with backoff.
 

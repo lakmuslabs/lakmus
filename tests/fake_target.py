@@ -52,12 +52,19 @@ class FakeTarget:
     async def teardown(self) -> None:
         self.teardowns += 1
 
+    @property
+    def config(self) -> TargetConfig | None:
+        """What `setup` was given. A test asserting on a reconstructed target reads it here."""
+        return self._config
+
     def fingerprint(self) -> TargetFingerprint:
         config = self._config
         return TargetFingerprint.create(
             adapter=self.adapter,
             kind=self.kind,
-            identity=f"fake://local#{config.identity if config else 'none'}",
+            # The identity it was configured with, the way a real adapter reports it: a fake that
+            # invented one made `lakmus replay` look wrong when the reconstruction was right.
+            identity=self._identity(),
             # Only known once a call has come back, exactly as a real provider behaves.
             declared_version=self._declared_version if self.version_known else None,
             parameters=dict(config.parameters) if config else {},
@@ -80,6 +87,12 @@ class FakeTarget:
             latency_ms=self._latency_ms,
             usage=Usage(tokens_in=10, tokens_out=2),
         )
+
+    def _identity(self) -> str:
+        config = self._config
+        if config is None:
+            return "unconfigured"
+        return f"{config.identity}#{config.model}" if config.model else config.identity
 
     def _next(self, case: RenderedCase) -> Reaction:
         if self._script:

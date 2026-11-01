@@ -5,8 +5,7 @@ reason this project has an engine of its own rather than a wrapper around someon
 """
 
 import asyncio
-from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import timedelta
 from pathlib import Path
 from random import Random
 from typing import Any, ClassVar
@@ -15,6 +14,7 @@ import pytest
 import yaml
 
 from fake_target import FakeTarget
+from harness import MOMENT, never_sleeps, planned, run_engine, single_suite
 from lakmus.engine import FileCache, NullCache, RetryPolicy, execute, plan
 from lakmus.engine.cache import cache_key
 from lakmus.engine.plan import check_target
@@ -29,67 +29,9 @@ from lakmus.errors import (
 from lakmus.results import comparable
 from lakmus.results.models import TargetFingerprint, cache_digest
 from lakmus.results.statistics import sample_indices
-from lakmus.scorers import BUILTIN_SCORERS, ScorerSpec
+from lakmus.scorers import BUILTIN_SCORERS
 from lakmus.suite.loader import MANIFEST_FILENAME, load, validate
 from lakmus.targets.base import TargetError, TargetKind
-
-MOMENT = datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC)
-SINGLE_METRICS = [{"id": "accuracy", "scorer": "builtin:exact", "with": {"expected": "expected"}}]
-
-
-async def _never_sleeps(seconds: float) -> None:
-    """The engine's waits are asserted on, never waited through."""
-    return None
-
-
-def _single_suite(root: Path, *, cases: Sequence[Mapping[str, Any]] | None = None) -> Path:
-    """A one-metric, single-answer suite built from the fixture."""
-    manifest = yaml.safe_load((root / MANIFEST_FILENAME).read_text(encoding="utf-8"))
-    manifest["metrics"] = SINGLE_METRICS
-    manifest["thresholds"] = {"accuracy": {"min": 0.9}}
-    manifest["target"]["output"] = {"type": "text"}
-    # The fixture repeats three times; a test counting calls wants one unless it says so.
-    manifest["run"]["repeats"] = 1
-    (root / MANIFEST_FILENAME).write_text(
-        yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
-    )
-    (root / "prompts" / "screener.j2").write_text("{{ question }}\n", encoding="utf-8")
-    rows = cases or [
-        {"id": f"c-{index}", "question": f"question {index} ?", "expected": "oui"}
-        for index in range(3)
-    ]
-    (root / "cases" / "pairs.jsonl").write_text(
-        "\n".join(__import__("json").dumps(row, ensure_ascii=False) for row in rows) + "\n",
-        encoding="utf-8",
-    )
-    (root / "scorers").mkdir(exist_ok=True)
-    return root
-
-
-def _planned(root: Path, **options: Any) -> Any:
-    suite = load(root, run_suite_code=False, scorers=BUILTIN_SCORERS)
-    specs: dict[str, ScorerSpec] = {
-        metric.id: BUILTIN_SCORERS[metric.scorer.removeprefix("builtin:")]
-        for metric in suite.manifest.metrics
-    }
-    return plan(suite, specs=specs, **options)
-
-
-async def _run(root: Path, target: FakeTarget, **options: Any) -> Any:
-    run_plan = _planned(root, **options.pop("plan", {}))
-    await target.setup(run_plan.target_config(identity="scripted", model=None))
-    try:
-        return await execute(
-            run_plan,
-            target=target,
-            clock=lambda: MOMENT,
-            entropy=Random(42),
-            sleep=_never_sleeps,
-            **options,
-        )
-    finally:
-        await target.teardown()
-
 
 # --- ADR 0003 parity: two retry levels ---------------------------------------------------------
 
@@ -97,10 +39,10 @@ async def _run(root: Path, target: FakeTarget, **options: Any) -> Any:
 async def test_parity_a_retryable_error_is_retried_and_a_terminal_one_is_recorded(
     valid_suite: Path,
 ) -> None:
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     target = FakeTarget(script=[TargetUnavailable("later"), "oui"])
 
-    result = await _run(root, target)
+    result = await run_engine(root, target)
 
     assert len(target.calls) == 2
     assert result.cases[0].answers[0].attempts == 2
@@ -108,7 +50,7 @@ async def test_parity_a_retryable_error_is_retried_and_a_terminal_one_is_recorde
 
 
 async def test_parity_a_case_that_never_answers_is_recorded_not_fatal(valid_suite: Path) -> None:
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[
             {"id": "c-0", "question": "q ?", "expected": "oui"},
@@ -119,7 +61,7 @@ async def test_parity_a_case_that_never_answers_is_recorded_not_fatal(valid_suit
         answer=lambda case: TargetUnavailable("down") if case.case_id == "c-0" else "oui"
     )
 
-    result = await _run(root, target, policy=RetryPolicy(attempts=2))
+    result = await run_engine(root, target, policy=RetryPolicy(attempts=2))
 
     summary = result.run.summary["accuracy"]
     assert summary.n_errors == 1
@@ -128,10 +70,10 @@ async def test_parity_a_case_that_never_answers_is_recorded_not_fatal(valid_suit
 
 
 async def test_parity_the_retry_budget_is_spent_and_then_recorded(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     target = FakeTarget(answer=lambda case: TargetUnavailable("down"))
 
-    result = await _run(root, target, policy=RetryPolicy(attempts=3))
+    result = await run_engine(root, target, policy=RetryPolicy(attempts=3))
 
     assert len(target.calls) == 3
     error = result.cases[0].answers[0].output.error
@@ -140,14 +82,14 @@ async def test_parity_the_retry_budget_is_spent_and_then_recorded(valid_suite: P
 
 
 async def test_a_provider_that_says_when_to_come_back_is_obeyed(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     target = FakeTarget(script=[TargetRateLimited("slow", retry_after_s=12.0), "oui"])
     waits: list[float] = []
 
     async def record(seconds: float) -> None:
         waits.append(seconds)
 
-    run_plan = _planned(root)
+    run_plan = planned(root)
     await target.setup(run_plan.target_config(identity="scripted", model=None))
     await execute(run_plan, target=target, clock=lambda: MOMENT, entropy=Random(1), sleep=record)
 
@@ -158,7 +100,7 @@ async def test_a_provider_that_says_when_to_come_back_is_obeyed(valid_suite: Pat
 
 
 async def test_parity_a_per_attempt_timeout_is_retried_then_recorded(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
 
     class Hangs(FakeTarget):
         async def invoke(self, case: Any) -> Any:
@@ -172,14 +114,14 @@ async def test_parity_a_per_attempt_timeout_is_retried_then_recorded(valid_suite
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
 
     target = Hangs()
-    run_plan = _planned(root)
+    run_plan = planned(root)
     await target.setup(run_plan.target_config(identity="scripted", model=None))
     result = await execute(
         run_plan,
         target=target,
         clock=lambda: MOMENT,
         entropy=Random(1),
-        sleep=_never_sleeps,
+        sleep=never_sleeps,
         policy=RetryPolicy(attempts=2),
     )
 
@@ -193,7 +135,7 @@ async def test_parity_a_per_attempt_timeout_is_retried_then_recorded(valid_suite
 
 
 async def test_parity_concurrency_is_bounded_and_recorded(valid_suite: Path) -> None:
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(12)],
     )
@@ -209,7 +151,7 @@ async def test_parity_concurrency_is_bounded_and_recorded(valid_suite: Path) -> 
             live -= 1
             return await FakeTarget.invoke(self, case)
 
-    result = await _run(root, Counts(), plan={"concurrency": 3})
+    result = await run_engine(root, Counts(), plan={"concurrency": 3})
 
     assert peak <= 3
     assert result.run.config.concurrency == 3
@@ -229,13 +171,13 @@ def test_parity_a_changed_temperature_misses_the_cache() -> None:
 
 async def test_parity_a_second_run_pays_for_nothing(valid_suite: Path, tmp_path: Path) -> None:
     """Resuming is re-running: the cache answers by content, so there is no --resume flag."""
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
     cache = FileCache(root=tmp_path / "cache", tool_version="test")
 
     first = FakeTarget()
-    await _run(root, first, cache=cache)
+    await run_engine(root, first, cache=cache)
     second = FakeTarget()
-    result = await _run(root, second, cache=cache)
+    result = await run_engine(root, second, cache=cache)
 
     assert len(first.calls) == 3
     assert second.calls == []
@@ -244,13 +186,13 @@ async def test_parity_a_second_run_pays_for_nothing(valid_suite: Path, tmp_path:
 
 async def test_only_an_answer_is_cached_never_an_error(valid_suite: Path, tmp_path: Path) -> None:
     """A provider's transient failure kept forever would be a permanent wrong answer."""
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     cache = FileCache(root=tmp_path / "cache", tool_version="test")
 
     failing = FakeTarget(answer=lambda case: TargetError(kind="bad_request", message="nope"))
-    await _run(root, failing, cache=cache)
+    await run_engine(root, failing, cache=cache)
     recovered = FakeTarget()
-    result = await _run(root, recovered, cache=cache)
+    result = await run_engine(root, recovered, cache=cache)
 
     assert len(recovered.calls) == 1
     assert result.run.summary["accuracy"].value == 1.0
@@ -270,9 +212,9 @@ def test_a_corrupt_cache_entry_is_a_miss_not_a_crash(tmp_path: Path) -> None:
 
 
 async def test_parity_the_seed_and_the_resample_count_are_recorded(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
 
-    result = await _run(root, FakeTarget(), plan={"bootstrap_resamples": 250})
+    result = await run_engine(root, FakeTarget(), plan={"bootstrap_resamples": 250})
 
     assert result.run.config.bootstrap_resamples == 250
     assert result.run.config.seed == 42
@@ -282,11 +224,11 @@ async def test_parity_the_seed_and_the_resample_count_are_recorded(valid_suite: 
 
 
 async def test_an_interrupted_run_is_readable_and_not_comparable(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
     stop = asyncio.Event()
     stop.set()
 
-    result = await _run(root, FakeTarget(), stop=stop)
+    result = await run_engine(root, FakeTarget(), stop=stop)
 
     assert result.run.status == "interrupted"
     assert result.cases == ()
@@ -296,13 +238,13 @@ async def test_an_interrupted_run_is_readable_and_not_comparable(valid_suite: Pa
 async def test_ten_consecutive_failures_end_the_run(valid_suite: Path) -> None:
     """Paying for five thousand cases to learn the target is misconfigured is the expensive
     mistake."""
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(40)],
     )
     target = FakeTarget(answer=lambda case: TargetError(kind="bad_request", message="nope"))
 
-    result = await _run(root, target, plan={"concurrency": 1}, early_abort=10)
+    result = await run_engine(root, target, plan={"concurrency": 1}, early_abort=10)
 
     assert result.aborted is True
     assert result.run.status == "interrupted"
@@ -310,27 +252,27 @@ async def test_ten_consecutive_failures_end_the_run(valid_suite: Path) -> None:
 
 
 async def test_the_early_abort_can_be_turned_off(valid_suite: Path) -> None:
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(12)],
     )
     target = FakeTarget(answer=lambda case: TargetError(kind="bad_request", message="nope"))
 
-    result = await _run(root, target, plan={"concurrency": 1}, early_abort=0)
+    result = await run_engine(root, target, plan={"concurrency": 1}, early_abort=0)
 
     assert result.aborted is False
     assert len(result.cases) == 12
 
 
 async def test_one_good_case_among_the_first_ten_keeps_the_run_going(valid_suite: Path) -> None:
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(12)],
     )
     answers = iter(["oui"] + [TargetError(kind="bad_request", message="nope")] * 11)
     target = FakeTarget(answer=lambda case: next(answers))
 
-    result = await _run(root, target, plan={"concurrency": 1}, early_abort=10)
+    result = await run_engine(root, target, plan={"concurrency": 1}, early_abort=10)
 
     assert result.aborted is False
     assert len(result.cases) == 12
@@ -341,7 +283,7 @@ async def test_one_good_case_among_the_first_ten_keeps_the_run_going(valid_suite
 
 async def test_a_case_missing_a_template_field_fails_alone(valid_suite: Path) -> None:
     """The template compiled, so it is this case's fault and not the suite's."""
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[
             {"id": "c-0", "question": "q ?", "expected": "oui"},
@@ -349,7 +291,7 @@ async def test_a_case_missing_a_template_field_fails_alone(valid_suite: Path) ->
         ],
     )
 
-    result = await _run(root, FakeTarget())
+    result = await run_engine(root, FakeTarget())
 
     summary = result.run.summary["accuracy"]
     assert (summary.n_cases, summary.n_errors) == (1, 1)
@@ -380,7 +322,7 @@ async def test_a_pair_is_two_calls_each_seeing_its_own_side(valid_suite: Path) -
     )
     target = FakeTarget(script=[{"decision": "retenu"}, {"decision": "retenu"}])
 
-    result = await _run(root, target)
+    result = await run_engine(root, target)
 
     assert [call.prompt.strip() for call in target.calls] == [
         "a|comptable|Amélie",
@@ -395,9 +337,9 @@ async def test_a_pair_is_two_calls_each_seeing_its_own_side(valid_suite: Path) -
 
 async def test_the_fingerprint_is_taken_after_the_calls(valid_suite: Path) -> None:
     """A provider names the version it served only in a response."""
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
 
-    result = await _run(root, FakeTarget())
+    result = await run_engine(root, FakeTarget())
 
     assert result.run.target.declared_version == "fake-2026-11-01"
 
@@ -405,8 +347,8 @@ async def test_the_fingerprint_is_taken_after_the_calls(valid_suite: Path) -> No
 async def test_a_target_of_the_wrong_kind_is_refused_before_the_first_call(
     valid_suite: Path,
 ) -> None:
-    root = _single_suite(valid_suite)
-    run_plan = _planned(root)
+    root = single_suite(valid_suite)
+    run_plan = planned(root)
 
     class AgentShaped(FakeTarget):
         kind: ClassVar[TargetKind] = "agent"
@@ -420,7 +362,7 @@ async def test_a_target_of_the_wrong_kind_is_refused_before_the_first_call(
 
 def test_a_suite_that_mixes_arities_is_refused(valid_suite: Path) -> None:
     """Validation catches it first; the plan refuses it too, for a caller using the library."""
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
     manifest = yaml.safe_load((root / MANIFEST_FILENAME).read_text(encoding="utf-8"))
     manifest["metrics"] = [
         {"id": "accuracy", "scorer": "builtin:exact"},
@@ -435,20 +377,20 @@ def test_a_suite_that_mixes_arities_is_refused(valid_suite: Path) -> None:
 
     assert {finding.code for finding in findings} == {Code.METRIC_ARITY_MIXED}
     with pytest.raises(SuiteInvalid):
-        _planned(root)
+        planned(root)
 
 
 def test_an_override_of_something_that_is_not_a_run_field_is_refused(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
 
     with pytest.raises(TargetConfigError, match="nothing to override"):
-        _planned(root, overrides={"temprature": 0.7})
+        planned(root, overrides={"temprature": 0.7})
 
 
 def test_an_override_is_recorded_so_that_comparability_can_see_it(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
 
-    run_plan = _planned(root, overrides={"temperature": 0.7})
+    run_plan = planned(root, overrides={"temperature": 0.7})
 
     assert run_plan.config.temperature == 0.7
     assert run_plan.config.overrides == {"temperature": 0.7}
@@ -456,7 +398,7 @@ def test_an_override_is_recorded_so_that_comparability_can_see_it(valid_suite: P
 
 async def test_a_scorer_that_cannot_run_ends_the_run(valid_suite: Path) -> None:
     """The same fault for every case, so recording it five thousand times would bury it."""
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
     manifest = yaml.safe_load((root / MANIFEST_FILENAME).read_text(encoding="utf-8"))
     manifest["metrics"] = [
         {"id": "accuracy", "scorer": "builtin:exact", "with": {"normalise": ["strip_accents"]}}
@@ -467,21 +409,21 @@ async def test_a_scorer_that_cannot_run_ends_the_run(valid_suite: Path) -> None:
     )
 
     with pytest.raises(ScorerError, match="unknown normalisation step"):
-        await _run(root, FakeTarget())
+        await run_engine(root, FakeTarget())
 
 
 # --- a case is an error only when no repeat of it scored ---------------------------------------
 
 
 async def test_a_case_contributes_the_repeats_that_scored(valid_suite: Path) -> None:
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     manifest_path = root / MANIFEST_FILENAME
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     manifest["run"]["repeats"] = 2
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
     target = FakeTarget(script=["oui", TargetError(kind="bad_request", message="nope")])
 
-    result = await _run(root, target, cache=NullCache())
+    result = await run_engine(root, target, cache=NullCache())
 
     summary = result.run.summary["accuracy"]
     assert (summary.n_cases, summary.n_errors, summary.n_observations) == (1, 0, 1)
@@ -497,13 +439,13 @@ async def test_parity_a_whole_run_time_limit_stops_scheduling(valid_suite: Path)
     so it would have passed against an engine that ran nothing at all. It now pins both ends:
     some work happened, and not all of it did.
     """
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
     )
     reads = iter(range(1000))
     target = FakeTarget()
-    run_plan = _planned(root, concurrency=1)
+    run_plan = planned(root, concurrency=1)
     await target.setup(run_plan.target_config(identity="scripted", model=None))
 
     result = await execute(
@@ -512,7 +454,7 @@ async def test_parity_a_whole_run_time_limit_stops_scheduling(valid_suite: Path)
         # One virtual second per read, so the deadline arrives part-way through the suite.
         clock=lambda: MOMENT.replace(second=next(reads) % 60),
         entropy=Random(1),
-        sleep=_never_sleeps,
+        sleep=never_sleeps,
         time_limit_s=4.0,
     )
 
@@ -522,12 +464,12 @@ async def test_parity_a_whole_run_time_limit_stops_scheduling(valid_suite: Path)
 
 
 async def test_without_a_limit_a_long_run_is_not_cut_short(valid_suite: Path) -> None:
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
     )
 
-    result = await _run(root, FakeTarget())
+    result = await run_engine(root, FakeTarget())
 
     assert result.run.status == "complete"
     assert len(result.cases) == 20
@@ -543,13 +485,13 @@ async def test_the_early_abort_actually_saves_the_calls(valid_suite: Path) -> No
     finished, so all forty cases were called and the abort saved nothing. The run was still
     marked interrupted, which is how it looked correct.
     """
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(40)],
     )
     target = FakeTarget(answer=lambda case: TargetError(kind="bad_request", message="nope"))
 
-    result = await _run(root, target, plan={"concurrency": 1}, early_abort=10)
+    result = await run_engine(root, target, plan={"concurrency": 1}, early_abort=10)
 
     assert result.aborted is True
     assert len(target.calls) <= 12
@@ -560,7 +502,7 @@ async def test_an_interruption_stops_scheduling_rather_than_only_labelling(
     valid_suite: Path,
 ) -> None:
     """What M6's Ctrl-C handler depends on: setting the event has to stop the spending."""
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
     )
@@ -574,7 +516,7 @@ async def test_an_interruption_stops_scheduling_rather_than_only_labelling(
             return await FakeTarget.invoke(self, case)
 
     target = Stops()
-    result = await _run(root, target, plan={"concurrency": 1}, stop=stop)
+    result = await run_engine(root, target, plan={"concurrency": 1}, stop=stop)
 
     assert result.run.status == "interrupted"
     assert len(target.calls) <= calls_before_stop + 2
@@ -583,7 +525,7 @@ async def test_an_interruption_stops_scheduling_rather_than_only_labelling(
 
 async def test_a_configuration_fault_stops_the_other_workers_too(valid_suite: Path) -> None:
     """A config error used to end the caller while the remaining workers kept spending."""
-    root = _single_suite(
+    root = single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
     )
@@ -597,7 +539,7 @@ async def test_a_configuration_fault_stops_the_other_workers_too(valid_suite: Pa
     target = Misconfigured()
 
     with pytest.raises(TargetConfigError, match="does not exist"):
-        await _run(root, target, plan={"concurrency": 4})
+        await run_engine(root, target, plan={"concurrency": 4})
 
     assert len(target.calls) <= 8
 
@@ -611,7 +553,7 @@ async def test_a_judge_scored_case_that_loses_a_repeat_is_an_error_not_a_crash(
     partial case reached it and raised, which is the opposite of "a failed case is recorded, not
     fatal".
     """
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     manifest_path = root / MANIFEST_FILENAME
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     manifest["run"]["repeats"] = 2
@@ -634,7 +576,7 @@ async def test_a_judge_scored_case_that_loses_a_repeat_is_an_error_not_a_crash(
     run_plan = plan(suite, specs=specs)
     await target.setup(run_plan.target_config(identity="scripted", model=None))
     result = await execute(
-        run_plan, target=target, clock=lambda: MOMENT, entropy=Random(1), sleep=_never_sleeps
+        run_plan, target=target, clock=lambda: MOMENT, entropy=Random(1), sleep=never_sleeps
     )
 
     summary = result.run.summary["judged"]
@@ -662,12 +604,12 @@ async def test_an_unwritable_cache_does_not_end_a_run_already_paid_for(
     valid_suite: Path, tmp_path: Path
 ) -> None:
     """The rule `get` states and `put` used to break."""
-    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    root = single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
     read_only = tmp_path / "read-only"
     read_only.mkdir()
     read_only.chmod(0o500)
     try:
-        result = await _run(
+        result = await run_engine(
             root, FakeTarget(), cache=FileCache(root=read_only / "cache", tool_version="t")
         )
     finally:
@@ -708,13 +650,13 @@ def test_the_cache_digest_ignores_the_version_the_provider_served() -> None:
 
 async def test_a_run_at_another_temperature_pays_again(valid_suite: Path, tmp_path: Path) -> None:
     """End to end, through the key: the same suite at a different temperature is a cache miss."""
-    root = _single_suite(valid_suite)
+    root = single_suite(valid_suite)
     cache = FileCache(root=tmp_path / "cache", tool_version="test")
 
     cold = FakeTarget()
-    await _run(root, cold, cache=cache)
+    await run_engine(root, cold, cache=cache)
     warm = FakeTarget()
-    await _run(root, warm, cache=cache, plan={"overrides": {"temperature": 0.7}})
+    await run_engine(root, warm, cache=cache, plan={"overrides": {"temperature": 0.7}})
 
     assert len(cold.calls) == 3
     assert len(warm.calls) == 3
@@ -729,3 +671,36 @@ def test_a_sample_is_the_same_sample_on_another_machine() -> None:
     assert first != other
     assert len(set(first)) == 7
     assert sample_indices(5, 9, seed=1) == (0, 1, 2, 3, 4)
+
+
+# --- ADR 0010: the clock must not take a verdict away from a run that finished ------------------
+
+
+async def test_a_run_that_took_every_unit_is_complete_even_if_the_limit_passed_meanwhile(
+    valid_suite: Path,
+) -> None:
+    """The deadline is only a reason to stop *taking* work.
+
+    Asking the clock before asking whether any work was left stamped a run that scored every case
+    as interrupted — exit 3, not comparable, not publishable — whenever its last call happened to
+    return after the limit. Against a provider that is a window of about a second on every run.
+    """
+    root = single_suite(
+        valid_suite,
+        cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(3)],
+    )
+    # Four reads are what a one-worker run makes before the work runs out: the start, then one
+    # before each unit. Everything after that is past the deadline.
+    moments = iter([MOMENT] * 4 + [MOMENT + timedelta(seconds=30)] * 50)
+
+    result = await run_engine(
+        root,
+        FakeTarget(),
+        clock=lambda: next(moments),
+        time_limit_s=1,
+        plan={"concurrency": 1},
+    )
+
+    assert result.run.status == "complete"
+    assert len(result.cases) == 3
+    assert result.run.summary["accuracy"].value == 1.0

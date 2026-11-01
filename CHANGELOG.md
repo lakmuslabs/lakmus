@@ -81,6 +81,32 @@ specification and in each run file. Changes to either are called out here under
   replaced: two runs of one suite at different temperatures are no longer comparable.
 - `latency_ms` and `cost` report nothing rather than zero when every answer came from the cache,
   so a resumed run does not claim to have been instantaneous or free.
+- `lakmus run`: one suite against one target, writing `run.json`, `cases.jsonl.gz` and
+  `report.html` into `lakmus-runs/<run_id>/`, and exiting with the verdict. A suite drops into CI
+  with no wrapper script.
+- A partial run never produces a verdict: a run that was interrupted or stopped itself exits 3
+  even when every threshold in the subset that ran held. Any other choice would make an
+  interruption a way to pass a suite.
+- Only the overrides an invocation actually named are recorded, never the command's own defaults,
+  so a run invoked with no override stays comparable with every other run of that suite.
+- The run file is written last, after the cases and the report, and each file is renamed into
+  place: the presence of `run.json` is what tells a reader the directory is complete. An output
+  directory that already holds something is refused before the first call rather than overwritten.
+- `cases.jsonl.gz`: one line per case and repeat with every answer, score and error, opened by a
+  header naming the run it belongs to. Byte-reproducible for a given result, and readable with
+  accents intact. The rendered prompts are in it only under `--keep-prompts`.
+- `report.html`: a single file with no JavaScript and nothing fetched over the network, which
+  follows the reader's light or dark theme. It carries the aggregates, the provenance and the
+  failures, and never a prompt or an answer — those stay in the cases file.
+- An interrupt stops a run cleanly: it takes no new case, lets the calls in flight finish and
+  still writes all three files. A second interrupt abandons them.
+- `lakmus compare`: refuses two runs that did not measure the same thing and names which key
+  differs — the suite digest, an override and its two values, or a run that did not finish. For
+  comparable runs it reports whether the two intervals overlap, which is a statement about the
+  measurement rather than a significance test this project never defined.
+- `lakmus replay`: re-runs a recorded configuration, refusing a suite that no longer digests to
+  what that run measured. Naming another target measures it under a configuration that is
+  provably identical to the first, rather than one a human retyped.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

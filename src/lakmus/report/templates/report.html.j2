@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ run.suite.id }} — {{ run.run_id }}</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --ink: #16181d;
+  --muted: #5c6370;
+  --page: #ffffff;
+  --panel: #f5f6f8;
+  --line: #d9dce2;
+  --pass: #17643b;
+  --fail: #8c1d1d;
+  --partial: #7a4d05;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7e9ee;
+    --muted: #9aa1ae;
+    --page: #14161a;
+    --panel: #1c1f25;
+    --line: #2e323a;
+    --pass: #6fd49b;
+    --fail: #f08b8b;
+    --partial: #e0b457;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+  max-width: 62rem;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+h2 { font-size: 1rem; margin: 2.5rem 0 .75rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+p { margin: .4rem 0; }
+.verdict { display: flex; gap: .9rem; align-items: baseline; flex-wrap: wrap; border: 1px solid var(--line); border-left-width: 5px; border-radius: 6px; padding: 1rem 1.15rem; background: var(--panel); }
+.verdict strong { font-size: 1.5rem; letter-spacing: .04em; }
+.verdict.is-pass { border-left-color: var(--pass); } .verdict.is-pass strong { color: var(--pass); }
+.verdict.is-fail { border-left-color: var(--fail); } .verdict.is-fail strong { color: var(--fail); }
+.verdict.is-partial { border-left-color: var(--partial); } .verdict.is-partial strong { color: var(--partial); }
+.verdict.is-empty { border-left-color: var(--muted); } .verdict.is-empty strong { color: var(--muted); }
+.sub { color: var(--muted); font-size: .9rem; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+caption { text-align: left; color: var(--muted); font-size: .85rem; padding-bottom: .35rem; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+td.n, th.n { text-align: right; }
+dl { display: grid; grid-template-columns: minmax(9rem, auto) 1fr; gap: .3rem 1rem; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; }
+footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>{{ run.suite.id }} <span class="sub">{{ run.suite.version }}</span></h1>
+<p class="sub">Run <span class="mono">{{ run.run_id }}</span> · {{ run.created_at.isoformat() }} · {{ run.target.adapter }}:{{ run.target.identity }}</p>
+
+<div class="verdict is-{{ tone }}">
+  <strong>{{ verdict }}</strong>
+  <span>{{ explanation }}</span>
+</div>
+
+<h2>Metrics</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Metric</th><th class="n">Value</th><th>95% interval</th><th>Threshold</th>
+      <th>Verdict</th><th class="n">Cases</th><th class="n">Obs.</th><th class="n">Errors</th><th>Scoring</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for metric in metrics %}
+    <tr>
+      <td>{{ metric.metric_id }}</td>
+      <td class="n">{{ metric.value }}</td>
+      <td>{{ metric.interval }}</td>
+      <td>{{ metric.threshold }}</td>
+      <td>{{ metric.verdict }}{% if metric.note %} <span class="sub">({{ metric.note }})</span>{% endif %}</td>
+      <td class="n">{{ metric.cases }}</td>
+      <td class="n">{{ metric.observations }}</td>
+      <td class="n">{{ metric.errors }}</td>
+      <td class="sub">{{ metric.scoring }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="sub">An interval that straddles its threshold is marked inconclusive: the run held, and a rerun might not.</p>
+
+{% if run.by_group %}
+<h2>Breakdown</h2>
+{% for metric_id, fields in run.by_group | dictsort %}
+  {% for field, values in fields | dictsort %}
+<table>
+  <caption>{{ metric_id }} by {{ field }}</caption>
+  <thead><tr><th>{{ field }}</th><th class="n">Value</th><th>95% interval</th><th class="n">Cases</th></tr></thead>
+  <tbody>
+  {% for value, group in values | dictsort %}
+    <tr>
+      <td>{{ value }}</td>
+      <td class="n">{% if group.value is none %}&mdash;{% else %}{{ "%.4g" | format(group.value) }}{% endif %}</td>
+      <td>{% if group.ci95 %}[{{ "%.4g" | format(group.ci95[0]) }}, {{ "%.4g" | format(group.ci95[1]) }}]{% else %}&mdash;{% endif %}</td>
+      <td class="n">{{ group.n_cases }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+  {% endfor %}
+{% endfor %}
+{% endif %}
+
+{% if failures.total %}
+<h2>Failures</h2>
+<p>{{ failures.total }} case–metric pair(s) produced no score:
+  {% for kind, count in failures.by_kind %}<span class="mono">{{ kind }}</span> {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}.
+</p>
+<table>
+  <thead><tr><th>Case</th><th>Metric</th><th>Kind</th><th>Reason</th></tr></thead>
+  <tbody>
+  {% for failure in failures.shown %}
+    <tr>
+      <td class="mono">{{ failure.case_id }}</td>
+      <td>{{ failure.metric_id }}</td>
+      <td class="mono">{{ failure.kind or "unscoreable" }}</td>
+      <td>{{ failure.reason }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if failures.hidden %}
+<p class="sub">{{ failures.hidden }} more not shown. The whole set is in the run's cases file.</p>
+{% endif %}
+{% endif %}
+
+<h2>Target</h2>
+<dl>
+  <dt>Adapter</dt><dd>{{ run.target.adapter }} ({{ run.target.kind }})</dd>
+  <dt>Identity</dt><dd class="mono">{{ run.target.identity }}</dd>
+  <dt>Version served</dt><dd>{{ run.target.declared_version or "not reported by the provider" }}</dd>
+  <dt>Parameters</dt>
+  <dd>
+  {% if run.target.parameters %}
+    {% for name, value in run.target.parameters | dictsort %}<span class="mono">{{ name }} = {{ value }}</span>{% if not loop.last %} · {% endif %}{% endfor %}
+  {% else %}
+    none
+  {% endif %}
+  </dd>
+  <dt>Fingerprint</dt><dd class="mono">{{ run.target.sha256 }}</dd>
+</dl>
+
+<h2>Cost and latency</h2>
+<dl>
+  <dt>Cost</dt>
+  <dd>
+  {% if run.cost.usd is none %}
+    no price recorded for this model, so no figure &mdash; which is not the same as costing nothing
+  {% else %}
+    ${{ "%.4f" | format(run.cost.usd) }} <span class="sub">(price of {{ run.cost.pricing_as_of }}, from {{ run.cost.pricing_source }})</span>
+  {% endif %}
+  </dd>
+  <dt>Tokens</dt><dd>{{ run.cost.tokens_in }} in · {{ run.cost.tokens_out }} out <span class="sub">(fresh calls only)</span></dd>
+  <dt>Latency</dt>
+  <dd>
+  {% if run.latency_ms.p50 is none %}
+    nothing measured &mdash; every answer came from the cache
+  {% else %}
+    p50 {{ run.latency_ms.p50 }} ms · p95 {{ run.latency_ms.p95 }} ms
+  {% endif %}
+  </dd>
+</dl>
+
+<h2>Provenance</h2>
+<dl>
+  <dt>Tool</dt><dd>{{ run.tool.name }} {{ run.tool.version }} on Python {{ run.tool.python }}</dd>
+  <dt>Format</dt><dd>{{ run.lakmus_format }}</dd>
+  <dt>Status</dt><dd>{{ run.status }}</dd>
+  <dt>Suite inputs</dt><dd class="mono">{{ run.suite.inputs_sha256 }}<span class="sub"> — what two comparable runs must share</span></dd>
+  <dt>Suite content</dt><dd class="mono">{{ run.suite.content_sha256 }}</dd>
+  <dt>Configuration</dt>
+  <dd>
+    repeats {{ run.config.repeats }} · temperature {{ run.config.temperature }} · seed {{ run.config.seed }} ·
+    timeout {{ run.config.timeout_s }}s · concurrency {{ run.config.concurrency }} ·
+    {{ run.config.bootstrap_resamples }} bootstrap resamples
+  </dd>
+  <dt>Overrides</dt>
+  <dd>
+  {% if overrides %}
+    {% for name, value in overrides %}<span class="mono">{{ name }} = {{ value }}</span>{% if not loop.last %} · {% endif %}{% endfor %}
+    <span class="sub">— these are part of comparability</span>
+  {% else %}
+    none; every value came from the manifest
+  {% endif %}
+  </dd>
+</dl>
+
+<footer>
+Generated by {{ run.tool.name }} {{ run.tool.version }}. Prompts and answers are not in this file;
+they are in the run's cases file beside it.
+</footer>
+
+</body>
+</html>

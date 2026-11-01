@@ -9,7 +9,10 @@ from typing import Annotated
 import typer
 
 from lakmus import __version__
+from lakmus.cli.compare import compare
 from lakmus.cli.init import init
+from lakmus.cli.replay import replay
+from lakmus.cli.run import run
 from lakmus.cli.validate import validate
 
 app = typer.Typer(
@@ -21,6 +24,9 @@ app = typer.Typer(
 
 app.command()(init)
 app.command()(validate)
+app.command()(run)
+app.command()(compare)
+app.command()(replay)
 
 
 def _print_version(requested: bool) -> None:
