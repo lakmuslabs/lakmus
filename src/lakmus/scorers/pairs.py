@@ -6,9 +6,10 @@ moved. Both scorers are lower-is-better and both return 0 for an identical pair,
 neutral value a reader should see when nothing changed.
 """
 
+import math
 from typing import Any
 
-from lakmus.scorers.base import Case, PairOutputs, Score, object_of, scorer
+from lakmus.scorers.base import Case, PairOutputs, Score, describable, object_of, scorer
 
 
 @scorer(name="pair_gap", arity="pair", higher_is_better=False)
@@ -18,13 +19,18 @@ def pair_gap(case: Case, outputs: PairOutputs, *, field: str = "score") -> Score
     second = _number(outputs.b, field)
     if first is None or second is None:
         return Score.unscoreable(
-            f"one answer has no numeric field {field!r}",
-            a=_raw(outputs.a, field),
-            b=_raw(outputs.b, field),
+            f"one answer has no finite numeric field {field!r}",
+            a=describable(_raw(outputs.a, field)),
+            b=describable(_raw(outputs.b, field)),
         )
 
+    gap = abs(first - second)
+    if not math.isfinite(gap):
+        # Two finite numbers at opposite ends of the range still overflow.
+        return Score.unscoreable(f"the gap between {first} and {second} is not finite")
+
     return Score.of(
-        abs(first - second),
+        gap,
         field=field,
         a=first,
         b=second,
@@ -38,10 +44,16 @@ def pair_flip(case: Case, outputs: PairOutputs, *, field: str = "decision") -> S
     first = _raw(outputs.a, field)
     second = _raw(outputs.b, field)
     if first is None or second is None:
-        return Score.unscoreable(f"one answer has no field {field!r}", a=first, b=second)
+        return Score.unscoreable(
+            f"one answer has no field {field!r}",
+            a=describable(first),
+            b=describable(second),
+        )
 
     flipped = first != second
-    return Score.of(1.0 if flipped else 0.0, field=field, a=first, b=second)
+    return Score.of(
+        1.0 if flipped else 0.0, field=field, a=describable(first), b=describable(second)
+    )
 
 
 def _raw(output: Any, field: str) -> Any:
@@ -50,8 +62,15 @@ def _raw(output: Any, field: str) -> Any:
 
 
 def _number(output: Any, field: str) -> float | None:
+    """A finite number, or nothing.
+
+    `json.loads` turns `1e400` into an infinity and accepts `NaN`, and a gap computed from either
+    is a number no run file can hold. Declining is the rule for a bad answer; raising here would
+    end a run on one case.
+    """
     value = _raw(output, field)
     # A boolean is an int in Python; it is not a score.
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    return float(value)
+    number = float(value)
+    return number if math.isfinite(number) else None

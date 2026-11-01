@@ -123,8 +123,10 @@ class TargetBadRequest(LakmusError):
 
 
 class ScorerError(LakmusError):
-    """A scorer could not run at all.
+    """A scorer could not run at all: a bad option, an invalid pattern, a mis-declared type.
 
-    A scorer that merely cannot score one case returns its worst value with an explanation
-    instead, so that one bad output never ends a run.
+    These are the same mistake for every case, so they end the run rather than being recorded
+    thousands of times. A case the scorer merely cannot score is different: it gets a `Score` with
+    no value, is counted as an error and left out of the mean. Scoring it the worst value instead
+    would let a target that answered nothing pass a lower-is-better threshold.
     """

@@ -128,7 +128,9 @@ class CasesSpec(_Strict):
 
 
 OptionScalar = str | int | float | bool
-OptionValue = OptionScalar | list[OptionScalar]
+OptionValue = OptionScalar | list[OptionScalar] | dict[str, OptionScalar]
+"""One level of nesting, because `json_schema` configures itself with a mapping of field to type,
+exactly as `target.output.schema` does. Deeper than that and an option stops being configuration."""
 
 
 class MetricSpec(_Strict):

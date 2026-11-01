@@ -61,6 +61,9 @@ specification and in each run file. Changes to either are called out here under
   changing the measurement.
 - Normalisation steps `trim`, `collapse_space`, `nfc` and `lower`, applied in the order given.
   There is no accent-stripping step: in French `é` and `e` are different answers.
+- Both the name and the value of a scorer option are checked against the scorer's signature, so
+  a typo cannot silently invert a metric: `expect: matched` on `regex` is refused rather than
+  scoring 1 for every answer that does not match.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

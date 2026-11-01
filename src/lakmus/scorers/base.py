@@ -17,12 +17,14 @@ the items that matched, the reason it could not be scored.
 """
 
 import inspect
+import math
+import typing
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from lakmus.errors import ScorerError
 from lakmus.targets.base import TargetOutput
@@ -54,6 +56,18 @@ class Score(_Strict):
 
     value: float | None
     details: Mapping[str, Any] = {}
+
+    @model_validator(mode="after")
+    def _details_are_writable_to_a_file(self) -> Self:
+        """`details` reaches the cases file for every case.
+
+        `allow_inf_nan` guards `value` but not what a scorer puts in `details`, and `json.dumps`
+        spells an infinity as a bare token no JSON parser accepts.
+        """
+        offenders = sorted(_non_finite_paths(self.details))
+        if offenders:
+            raise ValueError(f"details hold a value that is not finite: {', '.join(offenders)}")
+        return self
 
     @property
     def scored(self) -> bool:
@@ -108,6 +122,10 @@ class ScorerSpec:
     deterministic: bool
     options: frozenset[str]
     required_options: frozenset[str]
+    option_types: Mapping[str, Any]
+    """The annotation of each option, so that a value can be checked and not only a name. Without
+    it `expect: matched` passes validation and then reports 1.0 for every answer that does *not*
+    match."""
     function: Callable[..., Score]
 
     def call(
@@ -124,7 +142,26 @@ class ScorerSpec:
         missing = sorted(self.required_options - set(options))
         if missing:
             raise ScorerError(f"{self.name}: missing option(s): {', '.join(missing)}")
+        for problem in self.option_problems(options):
+            raise ScorerError(f"{self.name}: {problem}")
         return self.function(case, answer, **options)
+
+    def option_problems(self, options: Mapping[str, Any]) -> list[str]:
+        """What is wrong with these option values, as sentences.
+
+        Names alone are not enough. An option is the only configuration a scorer has and it sits
+        inside the comparability digest, so a value the scorer does not understand has to be
+        refused rather than quietly reinterpreted.
+        """
+        problems: list[str] = []
+        for name, value in sorted(options.items()):
+            annotation = self.option_types.get(name)
+            if annotation is None:
+                continue
+            problem = _value_problem(annotation, value)
+            if problem is not None:
+                problems.append(f'option "{name}" {problem}')
+        return problems
 
 
 def scorer(
@@ -150,6 +187,7 @@ def scorer(
             deterministic=deterministic,
             options=optional | required,
             required_options=required,
+            option_types=_option_types(function, optional | required),
             function=function,
         )
         setattr(function, SCORER_SPEC_ATTRIBUTE, spec)
@@ -193,6 +231,24 @@ def normalise_text(text: str, steps: Sequence[str]) -> str:
     return result
 
 
+def describable(value: Any) -> Any:
+    """A value safe to put in `details`.
+
+    A scorer that echoes a raw answer back for a human to read must not be stopped by it: an
+    infinity in `details` fails the check that keeps the cases file valid JSON, which would turn
+    declining a case into raising — the one thing a scorer must never do.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float) and not math.isfinite(value):
+        return repr(value)
+    if isinstance(value, Mapping):
+        return {key: describable(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [describable(item) for item in value]
+    return value
+
+
 def text_of(output: TargetOutput) -> str | None:
     """The answer as text, or `None` when it is not text."""
     return output.content if isinstance(output.content, str) else None
@@ -201,3 +257,75 @@ def text_of(output: TargetOutput) -> str | None:
 def object_of(output: TargetOutput) -> Mapping[str, Any] | None:
     """The answer as a JSON object, or `None` when it is not one."""
     return output.content if isinstance(output.content, dict) else None
+
+
+def _option_types(function: Callable[..., Score], names: frozenset[str]) -> Mapping[str, Any]:
+    """The resolved annotation of each option, or nothing when it cannot be resolved."""
+    try:
+        hints = typing.get_type_hints(function)
+    except Exception:  # pragma: no cover - a scorer with an unresolvable annotation
+        return {}
+    return {name: hints[name] for name in names if name in hints}
+
+
+def _value_problem(annotation: Any, value: Any) -> str | None:
+    """Why a value does not fit an annotation, or `None` when it does."""
+    origin = typing.get_origin(annotation)
+    arguments = typing.get_args(annotation)
+
+    if origin is Literal:
+        if value not in arguments:
+            allowed = ", ".join(repr(option) for option in arguments)
+            return f"must be one of {allowed}, not {value!r}"
+        return None
+
+    if origin in {list, tuple} or annotation in {list, tuple}:
+        if not isinstance(value, list | tuple):
+            return f"must be a list, not {type(value).__name__}"
+        return None
+
+    if origin is dict or annotation is dict:
+        if not isinstance(value, dict):
+            return f"must be a mapping, not {type(value).__name__}"
+        return None
+
+    if origin is not None and origin is not Literal:
+        # Sequence[str], Mapping[str, str] and friends resolve to an abstract origin.
+        if issubclass(origin, Mapping) and not isinstance(value, Mapping):
+            return f"must be a mapping, not {type(value).__name__}"
+        if not issubclass(origin, Mapping) and isinstance(value, str):
+            return "must be a list, not a string"
+        return None
+
+    if annotation is bool:
+        return None if isinstance(value, bool) else f"must be true or false, not {value!r}"
+    if annotation is str:
+        return None if isinstance(value, str) else f"must be text, not {type(value).__name__}"
+    if annotation in {int, float}:
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return f"must be a number, not {type(value).__name__}"
+        return None
+    return None
+
+
+def _non_finite_paths(value: Any, path: str = "details", depth: int = 0) -> list[str]:
+    """Where a mapping holds a float that cannot be written to a file."""
+    if depth > 32:
+        raise ScorerError("details are nested too deeply to write to a file")
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, float) and not math.isfinite(value):
+        return [path]
+    if isinstance(value, Mapping):
+        return [
+            problem
+            for key, item in value.items()
+            for problem in _non_finite_paths(item, f"{path}.{key}", depth + 1)
+        ]
+    if isinstance(value, list | tuple):
+        return [
+            problem
+            for index, item in enumerate(value)
+            for problem in _non_finite_paths(item, f"{path}[{index}]", depth + 1)
+        ]
+    return []

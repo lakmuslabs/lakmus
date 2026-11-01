@@ -3,7 +3,8 @@
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from lakmus.scorers.base import Case, Score, normalise_text, object_of, scorer
+from lakmus.errors import ScorerError
+from lakmus.scorers.base import Case, Score, describable, normalise_text, object_of, scorer
 from lakmus.targets.base import TargetOutput
 
 DEFAULT_NORMALISE = ("trim", "nfc")
@@ -33,14 +34,19 @@ def json_schema(
     if answer is None:
         return Score.unscoreable("the answer is not a JSON object")
     if not schema:
-        return Score.unscoreable("the schema option declares no field")
+        raise ScorerError("json_schema: the schema option declares no field")
 
     missing: list[str] = []
     wrong: dict[str, str] = {}
     for field, declared in schema.items():
         expected_type = _TYPE_CHECKS.get(declared)
         if expected_type is None:
-            return Score.unscoreable(f"unknown declared type {declared!r} for field {field!r}")
+            # The same mistake for every case, so it ends the run rather than being recorded
+            # thousands of times with the one useful fact buried in them.
+            raise ScorerError(
+                f"json_schema: unknown declared type {declared!r} for field {field!r}; "
+                f"known types: {', '.join(_TYPE_CHECKS)}"
+            )
         if field not in answer:
             missing.append(field)
         elif not _is_a(answer[field], declared, expected_type):
@@ -82,7 +88,12 @@ def json_field_match(
 
     got = _as_comparable(answer[field], normalise)
     want = _as_comparable(case[expected], normalise)
-    return Score.of(1.0 if got == want else 0.0, field=field, expected=want, got=got)
+    return Score.of(
+        1.0 if got == want else 0.0,
+        field=field,
+        expected=describable(want),
+        got=describable(got),
+    )
 
 
 def _as_comparable(value: Any, normalise: Sequence[str]) -> Any:
@@ -121,6 +132,20 @@ def precision_recall_f1(
 
     wanted_set = {_hashable(item) for item in wanted}
     got_set = {_hashable(item) for item in got}
+    if not wanted_set and not got_set:
+        # Nothing to find and nothing wrongly found is a correct answer. Scoring it zero gives the
+        # worst value to a target that got the case exactly right.
+        return Score.of(
+            1.0,
+            reported=report,
+            precision=1.0,
+            recall=1.0,
+            f1=1.0,
+            true_positives=0,
+            missed=[],
+            spurious=[],
+        )
+
     true_positives = len(wanted_set & got_set)
     precision = true_positives / len(got_set) if got_set else 0.0
     recall = true_positives / len(wanted_set) if wanted_set else 0.0
@@ -139,10 +164,17 @@ def precision_recall_f1(
     )
 
 
-def _hashable(item: Any) -> Any:
-    """Items are compared as sets, and a suite may list objects."""
+def _hashable(item: Any, depth: int = 0) -> Any:
+    """Items are compared as sets, and a suite may list objects.
+
+    Duplicates vanish: the sets make `["a", "a", "b"]` and `["a", "b"]` the same set of items.
+    That is what precision and recall over extracted items mean, and the format specification
+    says so.
+    """
+    if depth > 32:
+        raise ScorerError("precision_recall_f1: an item is nested too deeply to compare")
     if isinstance(item, dict):
-        return tuple(sorted((key, _hashable(value)) for key, value in item.items()))
+        return tuple(sorted((key, _hashable(value, depth + 1)) for key, value in item.items()))
     if isinstance(item, list):
-        return tuple(_hashable(value) for value in item)
+        return tuple(_hashable(value, depth + 1) for value in item)
     return item

@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -542,6 +542,17 @@ def _check_options(
                 message=f'"{spec.name}" requires {", ".join(missing)}.',
             )
         )
+
+    for problem in spec.option_problems(options):
+        # A name that exists with a value the scorer does not understand is the dangerous case:
+        # `expect: matched` used to pass here and then invert the metric.
+        findings.append(
+            Finding(
+                code=Code.SCORER_OPTION_REFUSED,
+                location=location,
+                message=f'"{spec.name}" {problem}.',
+            )
+        )
     return findings
 
 
@@ -600,16 +611,28 @@ def _check_scorers(
                 )
                 continue
             for metric in by_module.get(relative, []):
-                if parse_scorer_ref(metric.scorer) == SuiteScorer(relative, function_name):
+                if _suite_scorer_of(metric) == SuiteScorer(relative, function_name):
                     findings += _check_options(metric.id, spec, metric.options)
     return findings
 
 
-def _spec_of(function: object) -> "ScorerSpec | None":
-    """Read the spec `@scorer` attached, importing the scorers package only when needed."""
-    from lakmus.scorers.base import spec_of
+SCORER_SPEC_ATTRIBUTE = "__lakmus_scorer__"
+"""The attribute `@scorer` attaches. Named here rather than imported from `lakmus.scorers`:
+importing it to read one attribute would pull the whole adapter stack into a manifest load, and
+the architecture says this module depends on nothing."""
 
-    return spec_of(function)
+
+def _suite_scorer_of(metric: MetricSpec) -> SuiteScorer | None:
+    parsed = parse_scorer_ref(metric.scorer)
+    return parsed if isinstance(parsed, SuiteScorer) else None
+
+
+def _spec_of(function: object) -> "ScorerSpec | None":
+    """Read the spec `@scorer` attached, without importing the package that defines it."""
+    candidate = getattr(function, SCORER_SPEC_ATTRIBUTE, None)
+    if candidate is None or not hasattr(candidate, "required_options"):
+        return None
+    return cast("ScorerSpec", candidate)
 
 
 def _import_module(path: Path, relative: str, findings: list[Finding]) -> ModuleType | None:

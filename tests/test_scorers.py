@@ -5,6 +5,7 @@ scorer that normalises them away measures something other than what a suite wrot
 """
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -243,7 +244,7 @@ def test_which_of_the_three_is_reported_is_the_suites_choice(report: str) -> Non
     [
         pytest.param(["a"], [], 0.0, id="nothing-predicted"),
         pytest.param([], ["a"], 0.0, id="nothing-expected"),
-        pytest.param([], [], 0.0, id="both-empty"),
+        pytest.param([], [], 1.0, id="both-empty-is-a-correct-answer-not-the-worst-one"),
         pytest.param(["a", "b"], ["a", "b"], 1.0, id="perfect"),
     ],
 )
@@ -399,3 +400,120 @@ def test_a_case_reads_its_own_fields_by_name() -> None:
     assert case.get("absent", "défaut") == "défaut"
     with pytest.raises(KeyError):
         _ = case["absent"]
+
+
+# --- the gaps the review found -----------------------------------------------------------------
+
+
+def test_a_declined_case_always_says_why() -> None:
+    """`unscoreable` promises a reason, and a reason nobody can read is no reason."""
+    score = pair_gap(_case(), _pair({"x": 1}, {"x": 2}))
+
+    assert score.details["error"]
+    assert isinstance(score.details["error"], str)
+
+
+@pytest.mark.parametrize(
+    "declined",
+    [
+        pytest.param(
+            lambda: json_field_match(_case(expected="oui"), _json({"other": 1}), field="decision"),
+            id="field-absent-from-the-answer",
+        ),
+        pytest.param(lambda: exact(_case(expected=0.8), _text("0.8")), id="case-field-is-not-text"),
+        pytest.param(
+            lambda: precision_recall_f1(_case(expected=["a"]), _json({"predicted": "a"})),
+            id="predicted-is-not-a-list",
+        ),
+        pytest.param(
+            lambda: pair_gap(_case(), _pair({"score": float("inf")}, {"score": 0.8})),
+            id="a-non-finite-score",
+        ),
+        pytest.param(
+            lambda: pair_gap(_case(), _pair({"score": 1e308}, {"score": -1e308})),
+            id="a-gap-that-overflows",
+        ),
+        pytest.param(
+            lambda: pair_gap(_case(), _pair({"score": None}, {"score": 0.8})),
+            id="a-null-score",
+        ),
+    ],
+)
+def test_every_declined_case_declines_with_a_reason(declined: Any) -> None:
+    score = declined()
+
+    assert score.value is None
+    assert score.details["error"]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(lambda: json_schema(_case(), _json({}), schema={}), id="empty-schema"),
+        pytest.param(
+            lambda: json_schema(_case(), _json({"s": 1}), schema={"s": "numbr"}),
+            id="mis-declared-type",
+        ),
+    ],
+)
+def test_an_option_fault_ends_the_run_rather_than_every_case(fault: Any) -> None:
+    """Recording it five thousand times would bury the one fact that matters."""
+    with pytest.raises(ScorerError):
+        fault()
+
+
+def test_duplicates_in_either_list_are_one_item() -> None:
+    """Precision and recall over a set of extracted items; the specification says so."""
+    score = precision_recall_f1(
+        _case(expected=["société", "société", "bénéfice"]),
+        _json({"predicted": ["société", "société", "société"]}),
+    )
+
+    assert score.details["precision"] == pytest.approx(1.0)
+    assert score.details["recall"] == pytest.approx(0.5)
+
+
+def test_a_correct_empty_answer_is_not_the_worst_answer() -> None:
+    """Nothing to find and nothing wrongly found: the target got the case exactly right."""
+    score = precision_recall_f1(_case(expected=[]), _json({"predicted": []}))
+
+    assert score.value == 1.0
+
+
+def test_details_that_cannot_be_written_to_a_file_are_refused() -> None:
+    """`details` reaches the cases file, and json.dumps spells an infinity as a bare token."""
+    with pytest.raises(ValueError, match="not finite"):
+        Score.of(1.0, observed=float("inf"))
+    with pytest.raises(ValueError, match="not finite"):
+        Score.of(1.0, nested={"values": [1.0, float("nan")]})
+
+
+@pytest.mark.parametrize("name", sorted(BUILTIN_SCORERS))
+def test_every_built_in_declares_an_arity_and_a_direction(name: str) -> None:
+    spec = BUILTIN_SCORERS[name]
+
+    assert spec.arity in {"single", "pair"}
+    assert isinstance(spec.higher_is_better, bool)
+    assert spec.name == name
+
+
+def test_an_option_value_the_scorer_cannot_use_is_refused_at_call_time() -> None:
+    """A scorer reached through the library API has no `validate` in front of it."""
+    with pytest.raises(ScorerError, match="must be one of"):
+        BUILTIN_SCORERS["regex"].call(_case(), _text("x"), {"pattern": "x", "expect": "matched"})
+
+
+def test_the_published_option_table_matches_the_registry() -> None:
+    """The specification is what another implementation reads, so it cannot drift."""
+    spec_text = Path("docs/spec/suite-format.md").read_text(encoding="utf-8")
+
+    for name, spec in sorted(BUILTIN_SCORERS.items()):
+        row = next(
+            (line for line in spec_text.split("\n") if line.startswith(f"| `{name}` |")), None
+        )
+        assert row is not None, f"{name} is not in the published option table"
+        for option in spec.options:
+            assert f"`{option}`" in row, f"{name}: the table does not list {option}"
+        for required in spec.required_options:
+            cells = [cell.strip() for cell in row.split("|")]
+            assert f"`{required}`" in cells[3], f"{name}: {required} is not listed as required"

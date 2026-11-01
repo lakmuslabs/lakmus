@@ -9,6 +9,7 @@ near-identical suites on disk would drift from the models the first time a field
 """
 
 import json
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -382,3 +383,97 @@ def test_without_a_registry_the_scorer_names_are_not_checked(valid_suite: Path) 
     _unknown_builtin(valid_suite)
 
     assert validate(valid_suite) == []
+
+
+EVERY_BUILTIN = [
+    {"id": "m_exact", "scorer": "builtin:exact", "with": {"expected": "expected"}},
+    {"id": "m_regex", "scorer": "builtin:regex", "with": {"pattern": r"\d{14}", "flags": "i"}},
+    {
+        "id": "m_json_schema",
+        "scorer": "builtin:json_schema",
+        "with": {"schema": {"score": "number", "decision": "string"}},
+    },
+    {
+        "id": "m_field",
+        "scorer": "builtin:json_field_match",
+        "with": {"field": "decision", "normalise": ["trim", "nfc"]},
+    },
+    {"id": "m_prf", "scorer": "builtin:precision_recall_f1", "with": {"report": "f1"}},
+    {"id": "m_gap", "scorer": "builtin:pair_gap", "with": {"field": "score"}},
+    {"id": "m_flip", "scorer": "builtin:pair_flip", "with": {"field": "decision"}},
+]
+
+
+def test_every_built_in_can_actually_be_declared_in_a_manifest(valid_suite: Path) -> None:
+    """The test that was missing.
+
+    `json_schema` configures itself with a mapping, and `with` accepted only scalars and lists, so
+    one of the seven was undeclarable — and nothing noticed, because no test declared any built-in
+    but `pair_flip` in a real manifest.
+    """
+
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = EVERY_BUILTIN
+        manifest["thresholds"] = {}
+
+    _edit_manifest(valid_suite, change)
+
+    assert validate(valid_suite, scorers=BUILTIN_SCORERS) == []
+
+
+@pytest.mark.parametrize(
+    ("options", "fragment"),
+    [
+        pytest.param({"pattern": r"\d+", "expect": "matched"}, "must be one of", id="bad-literal"),
+        pytest.param({"pattern": r"\d+", "flags": 5}, "must be text", id="number-for-text"),
+        pytest.param({"pattern": 5}, "must be text", id="number-for-a-pattern"),
+    ],
+)
+def test_an_option_value_the_scorer_cannot_use_is_refused(
+    valid_suite: Path, options: dict[str, Any], fragment: str
+) -> None:
+    """`expect: matched` used to pass validation and then report 1.0 for every answer that did
+    *not* match: a published metric inverted by a typo."""
+
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = [{"id": "m_regex", "scorer": "builtin:regex", "with": options}]
+        manifest["thresholds"] = {}
+
+    _edit_manifest(valid_suite, change)
+
+    findings = validate(valid_suite, scorers=BUILTIN_SCORERS)
+
+    assert {finding.code for finding in findings} == {Code.SCORER_OPTION_REFUSED}
+    assert fragment in findings[0].message
+
+
+def test_a_nested_option_deeper_than_one_level_is_refused(valid_suite: Path) -> None:
+    """An option is configuration, not a document."""
+
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = [
+            {
+                "id": "m_json_schema",
+                "scorer": "builtin:json_schema",
+                "with": {"schema": {"score": {"type": "number"}}},
+            }
+        ]
+        manifest["thresholds"] = {}
+
+    _edit_manifest(valid_suite, change)
+
+    assert Code.MANIFEST_INVALID_VALUE in _codes(valid_suite, run_suite_code=False)
+
+
+def test_loading_a_manifest_pulls_in_no_adapter(valid_suite: Path) -> None:
+    """The architecture says `suite` depends on nothing, and a lazy import had made that false.
+
+    A suite's own scorer may of course import the decorator; that is the suite author's code and
+    only happens with consent.
+    """
+    before = set(sys.modules)
+
+    validate(valid_suite, run_suite_code=False, scorers=BUILTIN_SCORERS)
+
+    pulled = {name for name in set(sys.modules) - before if name.startswith("lakmus.")}
+    assert pulled == set()
