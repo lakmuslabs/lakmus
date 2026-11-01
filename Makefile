@@ -24,3 +24,4 @@ live:
 schema:
 	uv run python -m lakmus.suite.schema
 	uv run python -m lakmus.results.schema
+	uv run python -m lakmus.scorers.catalogue

@@ -5,7 +5,6 @@ scorer that normalises them away measures something other than what a suite wrot
 """
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,6 +15,7 @@ from lakmus.scorers import (
     Case,
     PairOutputs,
     Score,
+    catalogue,
     exact,
     json_field_match,
     json_schema,
@@ -503,17 +503,35 @@ def test_an_option_value_the_scorer_cannot_use_is_refused_at_call_time() -> None
         BUILTIN_SCORERS["regex"].call(_case(), _text("x"), {"pattern": "x", "expect": "matched"})
 
 
-def test_the_published_option_table_matches_the_registry() -> None:
-    """The specification is what another implementation reads, so it cannot drift."""
-    spec_text = Path("docs/spec/suite-format.md").read_text(encoding="utf-8")
+def test_the_published_catalogue_matches_the_registry() -> None:
+    """The catalogue is what another implementation reads, so it cannot drift.
 
-    for name, spec in sorted(BUILTIN_SCORERS.items()):
-        row = next(
-            (line for line in spec_text.split("\n") if line.startswith(f"| `{name}` |")), None
-        )
-        assert row is not None, f"{name} is not in the published option table"
-        for option in spec.options:
-            assert f"`{option}`" in row, f"{name}: the table does not list {option}"
-        for required in spec.required_options:
-            cells = [cell.strip() for cell in row.split("|")]
-            assert f"`{required}`" in cells[3], f"{name}: {required} is not listed as required"
+    This replaces a test that read the specification document. That document is deliberately not
+    in the repository, so the test passed on a machine that had it and failed in CI — which is
+    also why the published table had to become a generated file rather than Markdown prose.
+    """
+    assert catalogue.CATALOGUE_PATH.read_text(encoding="utf-8") == catalogue.render(), (
+        "The committed catalogue is stale. Regenerate it with: make schema"
+    )
+
+
+def test_the_catalogue_describes_every_built_in_and_its_options() -> None:
+    described = {entry["name"]: entry for entry in catalogue.build()["scorers"]}
+
+    assert set(described) == set(BUILTIN_SCORERS)
+    for name, spec in BUILTIN_SCORERS.items():
+        entry = described[name]
+        assert set(entry["options"]) == spec.options
+        assert entry["arity"] == spec.arity
+        assert entry["higher_is_better"] == spec.higher_is_better
+        required = {option for option, shape in entry["options"].items() if shape["required"]}
+        assert required == spec.required_options
+
+
+def test_the_catalogue_says_which_values_an_option_accepts() -> None:
+    """A consumer in another language has to be able to check `expect: matched` itself."""
+    expect = next(entry for entry in catalogue.build()["scorers"] if entry["name"] == "regex")[
+        "options"
+    ]["expect"]
+
+    assert expect["choices"] == ["match", "no_match"]

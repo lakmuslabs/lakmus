@@ -1,0 +1,138 @@
+{
+  "$id": "https://lakmuslabs.github.io/lakmus/schemas/0.1/scorers.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "lakmus_format": "0.1",
+  "normalisation_steps": [
+    "collapse_space",
+    "lower",
+    "nfc",
+    "trim"
+  ],
+  "scorers": [
+    {
+      "arity": "single",
+      "deterministic": true,
+      "higher_is_better": true,
+      "name": "exact",
+      "options": {
+        "expected": {
+          "required": false,
+          "type": "string"
+        },
+        "normalise": {
+          "items": "string",
+          "required": false,
+          "type": "array"
+        }
+      }
+    },
+    {
+      "arity": "single",
+      "deterministic": true,
+      "higher_is_better": true,
+      "name": "json_field_match",
+      "options": {
+        "expected": {
+          "required": false,
+          "type": "string"
+        },
+        "field": {
+          "required": true,
+          "type": "string"
+        },
+        "normalise": {
+          "items": "string",
+          "required": false,
+          "type": "array"
+        }
+      }
+    },
+    {
+      "arity": "single",
+      "deterministic": true,
+      "higher_is_better": true,
+      "name": "json_schema",
+      "options": {
+        "schema": {
+          "required": true,
+          "type": "object",
+          "values": "string"
+        }
+      }
+    },
+    {
+      "arity": "pair",
+      "deterministic": true,
+      "higher_is_better": false,
+      "name": "pair_flip",
+      "options": {
+        "field": {
+          "required": false,
+          "type": "string"
+        }
+      }
+    },
+    {
+      "arity": "pair",
+      "deterministic": true,
+      "higher_is_better": false,
+      "name": "pair_gap",
+      "options": {
+        "field": {
+          "required": false,
+          "type": "string"
+        }
+      }
+    },
+    {
+      "arity": "single",
+      "deterministic": true,
+      "higher_is_better": true,
+      "name": "precision_recall_f1",
+      "options": {
+        "expected": {
+          "required": false,
+          "type": "string"
+        },
+        "predicted": {
+          "required": false,
+          "type": "string"
+        },
+        "report": {
+          "choices": [
+            "f1",
+            "precision",
+            "recall"
+          ],
+          "required": false,
+          "type": "string"
+        }
+      }
+    },
+    {
+      "arity": "single",
+      "deterministic": true,
+      "higher_is_better": true,
+      "name": "regex",
+      "options": {
+        "expect": {
+          "choices": [
+            "match",
+            "no_match"
+          ],
+          "required": false,
+          "type": "string"
+        },
+        "flags": {
+          "required": false,
+          "type": "string"
+        },
+        "pattern": {
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "title": "Lakmus built-in scorers 0.1"
+}

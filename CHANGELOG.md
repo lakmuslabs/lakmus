@@ -64,6 +64,10 @@ specification and in each run file. Changes to either are called out here under
 - Both the name and the value of a scorer option are checked against the scorer's signature, so
   a typo cannot silently invert a metric: `expect: matched` on `regex` is refused rather than
   scoring 1 for every answer that does not match.
+- A published catalogue of the built-in scorers at `lakmus/scorers/schemas/scorers-0.1.json`,
+  generated from the registry: each scorer's arity, direction and determinism, and for every
+  option whether it is required and which values it accepts. Another implementation can refuse a
+  bad option itself rather than trusting this one to.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and
