@@ -18,6 +18,14 @@ specification and in each run file. Changes to either are called out here under
   test rather than stated in documentation.
 - Domain exceptions in `lakmus.errors`, each carrying the process exit code the CLI uses for
   it: `0` success, `1` threshold failed, `2` usage or validation, `3` runtime.
+- `lakmus validate`: checks a suite against the format it declares and reports every problem
+  in one pass, each with a stable `LKM-` code and the fix. Suite scorers are imported only
+  with `--yes`, and never when there is no terminal to ask at.
+- `lakmus init`: scaffolds a suite that validates.
+- Manifest models for format 0.1, and the JSON Schema generated from them at
+  `lakmus/suite/schema/suite-0.1.json`.
+- Two suite digests: `inputs_sha256`, which changes only when a measurement could change and
+  is therefore the comparability key, and `content_sha256` for the whole directory.
 - Repository baseline: licence, contribution, conduct and security policies, issue and pull request
   templates, dependency updates, and continuous integration on Python 3.11 to 3.13.
 

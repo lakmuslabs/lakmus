@@ -1,7 +1,7 @@
 """Entry point for the `lakmus` command.
 
 Commands live in sibling modules and hold no domain logic: they parse arguments, call into the
-engine, and translate the outcome into an exit code.
+suite and the engine, and translate the outcome into an exit code.
 """
 
 from typing import Annotated
@@ -9,6 +9,8 @@ from typing import Annotated
 import typer
 
 from lakmus import __version__
+from lakmus.cli.init import init
+from lakmus.cli.validate import validate
 
 app = typer.Typer(
     name="lakmus",
@@ -16,6 +18,9 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+app.command()(init)
+app.command()(validate)
 
 
 def _print_version(requested: bool) -> None:

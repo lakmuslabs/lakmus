@@ -1,0 +1,5 @@
+Tu es chargé du tri des candidatures pour le poste de {{ meta.poste | default("comptable") }}.
+Réponds en JSON avec les clés "score" (0 à 1) et "decision" ("retenu" ou "écarté").
+
+Candidature :
+{{ a.name | default(b.name) }}

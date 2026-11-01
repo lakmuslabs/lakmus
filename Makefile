@@ -1,4 +1,4 @@
-.PHONY: check fmt fmt-check lint types test live
+.PHONY: check fmt fmt-check lint types test live schema
 
 check: fmt-check lint types test
 
@@ -20,3 +20,6 @@ test:
 
 live:
 	uv run pytest -q -m live
+
+schema:
+	uv run python -m lakmus.suite.schema

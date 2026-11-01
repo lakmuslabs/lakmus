@@ -1,0 +1,335 @@
+{
+  "$defs": {
+    "CasesSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "holdout": {
+          "anyOf": [
+            {
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\0]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdout"
+        },
+        "sample": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample"
+        },
+        "source": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\0]+$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "CasesSpec",
+      "type": "object"
+    },
+    "MetricSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "group_by": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "scorer": {
+          "pattern": "^(?:builtin:[a-z0-9_]+|[^\\s:]+\\.py:[A-Za-z_][A-Za-z0-9_]*)$",
+          "title": "Scorer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "scorer"
+      ],
+      "title": "MetricSpec",
+      "type": "object"
+    },
+    "OutputSpec": {
+      "additionalProperties": false,
+      "description": "What the target is expected to return.\n\n`schema` is a flat shorthand, not JSON Schema: every declared field is required, there is no\nnesting and no enums. The loader compiles it to JSON Schema, and the compiled form is what a\nrun file carries, so a consumer never has to learn this notation.",
+      "properties": {
+        "schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean"
+                ],
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema"
+        },
+        "type": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "OutputSpec",
+      "type": "object"
+    },
+    "RunSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "repeats": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "temperature": {
+          "default": 0.0,
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "timeout_s": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "title": "RunSpec",
+      "type": "object"
+    },
+    "TargetSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "anyOf": [
+            {
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\0]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input"
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "agent",
+            "mcp"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/OutputSpec",
+          "default": {
+            "schema": null,
+            "type": "text"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "TargetSpec",
+      "type": "object"
+    },
+    "Threshold": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        }
+      },
+      "title": "Threshold",
+      "type": "object"
+    }
+  },
+  "$id": "https://lakmuslabs.github.io/lakmus/schemas/0.1/suite.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`lakmus.yaml`.\n\n`domain` is not a field: it is read from `id`. Two sources for one fact are free to disagree.",
+  "properties": {
+    "authors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Authors",
+      "type": "array"
+    },
+    "cases": {
+      "$ref": "#/$defs/CasesSpec"
+    },
+    "id": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "lakmus": {
+      "const": "0.1",
+      "title": "Lakmus",
+      "type": "string"
+    },
+    "language": {
+      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+      "title": "Language",
+      "type": "string"
+    },
+    "license": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*$",
+      "title": "License",
+      "type": "string"
+    },
+    "maintainers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Maintainers",
+      "type": "array"
+    },
+    "metrics": {
+      "items": {
+        "$ref": "#/$defs/MetricSpec"
+      },
+      "minItems": 1,
+      "title": "Metrics",
+      "type": "array"
+    },
+    "risk_level": {
+      "default": "medium",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Risk Level",
+      "type": "string"
+    },
+    "run": {
+      "$ref": "#/$defs/RunSpec",
+      "default": {
+        "repeats": 1,
+        "seed": 0,
+        "temperature": 0.0,
+        "timeout_s": 60
+      }
+    },
+    "target": {
+      "$ref": "#/$defs/TargetSpec"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task"
+    },
+    "thresholds": {
+      "default": {},
+      "patternProperties": {
+        "^[a-z0-9]+(?:[_-][a-z0-9]+)*$": {
+          "$ref": "#/$defs/Threshold"
+        }
+      },
+      "title": "Thresholds",
+      "type": "object"
+    },
+    "title": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "lakmus",
+    "id",
+    "version",
+    "title",
+    "language",
+    "license",
+    "target",
+    "cases",
+    "metrics"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}
