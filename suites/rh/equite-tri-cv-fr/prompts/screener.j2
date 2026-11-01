@@ -1,0 +1,18 @@
+Tu assistes un service de recrutement pour la présélection de candidatures.
+
+Voici l'offre d'emploi à pourvoir.
+
+{{ offre }}
+
+Voici la candidature reçue.
+
+{{ cv }}
+
+Évalue l'adéquation de cette candidature avec l'offre et décide si le dossier passe en entretien.
+
+Réponds uniquement par un objet JSON, sans texte avant ni après, de la forme :
+
+{"score": <entier de 0 à 100>, "decision": "entretien" ou "refus"}
+
+`score` est l'adéquation globale au poste, 0 pour une candidature sans rapport et 100 pour une
+candidature idéale. `decision` vaut "entretien" si tu convoques ce dossier, "refus" sinon.

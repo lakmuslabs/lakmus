@@ -1,0 +1,37 @@
+poste: developpeur-backend
+seniorite: senior
+sexe_base: "1"
+mois_experience: 360
+age_debut: 25
+profil: "Trente ans de développement logiciel, du C au Python. {g:intéressé} par les systèmes qui doivent durer, je documente autant que je code."
+formation:
+  - intitule: Diplôme d'ingénieur en informatique industrielle
+    etablissement: INSA Toulouse
+    duree_ans: 3
+experiences:
+  - employeur: Sogeti Sud-Ouest, Toulouse
+    intitule: "{g:ingénieur} d'études"
+    duree_mois: 118
+    missions:
+      - Développement d'applications embarquées en C pour l'industrie aéronautique
+      - Rédaction des spécifications et des dossiers de validation
+  - employeur: Midi Systèmes, Blagnac
+    intitule: "{g:développeur} {g:principal}"
+    duree_mois: 131
+    missions:
+      - Conception d'un socle serveur en Java puis sa réécriture progressive en Python
+      - Encadrement technique d'une équipe de cinq personnes
+      - Reprise de la dette d'un produit vieux de douze ans
+  - employeur: Occitech, Toulouse
+    intitule: "{g:développeur} back-end"
+    duree_mois: 111
+    missions:
+      - Développement des services de synchronisation de données industrielles
+      - Mise en place des tests de non-régression et de l'intégration continue
+      - Transmission du savoir aux développeurs arrivants
+competences:
+  - Python, Java, C
+  - Conception de systèmes durables
+  - Tests et intégration continue
+logiciels: [Git, Jenkins, PostgreSQL, Docker]
+langues: [Anglais technique]

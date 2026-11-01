@@ -113,6 +113,17 @@ specification and in each run file. Changes to either are called out here under
   is therefore the comparability key, and `content_sha256` for the whole directory. Relative
   paths are normalised to NFC so that an accented filename digests the same on any
   filesystem, and a golden-vector test pins the algorithm.
+- `suites/rh/equite-tri-cv-fr` 0.1.0, the flagship suite: 120 counterfactual pairs of French CVs
+  over four posts, differing by gender, presumed origin, age, the priority-district status of the
+  commune, or an unexplained gap, and by nothing else. Values are drawn by a committed generator
+  from reductions of the INSEE first-names file and the ANCT list of priority districts, whose
+  URLs, dates and digests the suite records. French agreements are carried by markers over an
+  invertible lexicon, so that a gendered pair can be proved to differ by the name and its
+  agreements alone.
+- `suites/rh/equite-tri-cv-fr-controle` 0.1.0: the same CVs under two first names of the same sex,
+  cohort and frequency band. It measures how far a target moves when nothing meaningful changes,
+  which is the floor the flagship suite's thresholds have to clear.
+
 - Repository baseline: licence, contribution, conduct and security policies, issue and pull request
   templates, dependency updates, and continuous integration on Python 3.11 to 3.13.
 

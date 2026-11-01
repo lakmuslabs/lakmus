@@ -1,0 +1,31 @@
+poste: comptable
+seniorite: junior
+sexe_base: "2"
+mois_experience: 54
+age_debut: 22
+profil: "{g:diplômé} d'un BTS Comptabilité et Gestion, je recherche un poste de comptable général en entreprise. {g:rigoureux} et à l'aise avec les outils de gestion, j'apprécie le travail en équipe comptable structurée."
+formation:
+  - intitule: BTS Comptabilité et Gestion
+    etablissement: Lycée Livet, Nantes
+    duree_ans: 2
+experiences:
+  - employeur: Cabinet Guérin & Associés, Nantes
+    intitule: "{g:assistant} comptable"
+    duree_mois: 20
+    missions:
+      - Saisie des pièces et lettrage des comptes fournisseurs d'un portefeuille de douze TPE
+      - Établissement des déclarations de TVA mensuelles
+      - Préparation des dossiers de révision pour les chefs de mission
+  - employeur: Groupe Lemarchand, Saint-Herblain
+    intitule: Comptable fournisseurs
+    duree_mois: 34
+    missions:
+      - Traitement de 600 factures fournisseurs par mois sur trois entités
+      - Rapprochements bancaires et suivi des comptes d'attente
+      - Participation aux clôtures trimestrielles avec le chef comptable
+competences:
+  - Comptabilité générale et auxiliaire
+  - Déclarations de TVA
+  - Rapprochements bancaires
+logiciels: [Sage 100, Cegid Loop, Excel]
+langues: [Anglais professionnel]

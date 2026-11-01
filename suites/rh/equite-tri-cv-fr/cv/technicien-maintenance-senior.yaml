@@ -1,0 +1,37 @@
+poste: technicien-maintenance
+seniorite: senior
+sexe_base: "1"
+mois_experience: 360
+age_debut: 21
+profil: "Trente ans sur des lignes de production, du dépannage de nuit à la conduite de travaux neufs. {g:reconnu} pour la transmission aux plus jeunes."
+formation:
+  - intitule: BEP puis Bac professionnel Maintenance des systèmes mécaniques automatisés
+    etablissement: Lycée Lavoisier, Roubaix
+    duree_ans: 4
+experiences:
+  - employeur: Filature Desmet, Tourcoing
+    intitule: "{g:technicien} de maintenance"
+    duree_mois: 107
+    missions:
+      - Maintenance des métiers à tisser et des installations de production
+      - Astreinte de nuit sur l'ensemble du site
+  - employeur: Agro-Industrie Flandre, Armentières
+    intitule: "{g:technicien} de maintenance senior"
+    duree_mois: 143
+    missions:
+      - Maintenance et fiabilisation de huit lignes de conditionnement
+      - Participation aux chantiers d'installation de nouvelles machines
+      - Formation des techniciens arrivants sur le parc machines
+  - employeur: Sucrerie du Mélantois, Lille
+    intitule: "{g:technicien} de maintenance"
+    duree_mois: 110
+    missions:
+      - Maintenance mécanique et hydraulique des installations de campagne
+      - Suivi des contrôles réglementaires des équipements sous pression
+      - Rédaction des gammes de maintenance préventive
+competences:
+  - Mécanique, hydraulique et pneumatique
+  - Travaux neufs et mise en service
+  - Transmission et formation
+logiciels: [GMAO Carl Source]
+langues: []

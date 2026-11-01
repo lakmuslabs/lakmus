@@ -1,0 +1,1080 @@
+{
+ "200046977": [
+  {
+   "code": "69003",
+   "nom": "Albigny-sur-Saône",
+   "population": 3057
+  },
+  {
+   "code": "69029",
+   "nom": "Bron",
+   "population": 42982
+  },
+  {
+   "code": "69033",
+   "nom": "Cailloux-sur-Fontaines",
+   "population": 2989
+  },
+  {
+   "code": "69034",
+   "nom": "Caluire-et-Cuire",
+   "population": 43597
+  },
+  {
+   "code": "69040",
+   "nom": "Champagne-au-Mont-d'Or",
+   "population": 6311
+  },
+  {
+   "code": "69044",
+   "nom": "Charbonnières-les-Bains",
+   "population": 5383
+  },
+  {
+   "code": "69046",
+   "nom": "Charly",
+   "population": 4811
+  },
+  {
+   "code": "69271",
+   "nom": "Chassieu",
+   "population": 11208
+  },
+  {
+   "code": "69063",
+   "nom": "Collonges-au-Mont-d'Or",
+   "population": 4669
+  },
+  {
+   "code": "69273",
+   "nom": "Corbas",
+   "population": 11315
+  },
+  {
+   "code": "69068",
+   "nom": "Couzon-au-Mont-d'Or",
+   "population": 2619
+  },
+  {
+   "code": "69069",
+   "nom": "Craponne",
+   "population": 12084
+  },
+  {
+   "code": "69071",
+   "nom": "Curis-au-Mont-d'Or",
+   "population": 1195
+  },
+  {
+   "code": "69072",
+   "nom": "Dardilly",
+   "population": 9221
+  },
+  {
+   "code": "69275",
+   "nom": "Décines-Charpieu",
+   "population": 29877
+  },
+  {
+   "code": "69276",
+   "nom": "Feyzin",
+   "population": 10304
+  },
+  {
+   "code": "69085",
+   "nom": "Fleurieu-sur-Saône",
+   "population": 1597
+  },
+  {
+   "code": "69087",
+   "nom": "Fontaines-Saint-Martin",
+   "population": 3098
+  },
+  {
+   "code": "69088",
+   "nom": "Fontaines-sur-Saône",
+   "population": 6957
+  },
+  {
+   "code": "69089",
+   "nom": "Francheville",
+   "population": 15604
+  },
+  {
+   "code": "69278",
+   "nom": "Genay",
+   "population": 5585
+  },
+  {
+   "code": "69091",
+   "nom": "Givors",
+   "population": 21379
+  },
+  {
+   "code": "69096",
+   "nom": "Grigny-sur-Rhône",
+   "population": 10030
+  },
+  {
+   "code": "69100",
+   "nom": "Irigny",
+   "population": 9034
+  },
+  {
+   "code": "69279",
+   "nom": "Jonage",
+   "population": 6144
+  },
+  {
+   "code": "69142",
+   "nom": "La Mulatière",
+   "population": 6534
+  },
+  {
+   "code": "69250",
+   "nom": "La Tour-de-Salvagny",
+   "population": 4649
+  },
+  {
+   "code": "69116",
+   "nom": "Limonest",
+   "population": 4012
+  },
+  {
+   "code": "69117",
+   "nom": "Lissieu",
+   "population": 3181
+  },
+  {
+   "code": "69123",
+   "nom": "Lyon",
+   "population": 519127
+  },
+  {
+   "code": "69127",
+   "nom": "Marcy-l'Étoile",
+   "population": 3778
+  },
+  {
+   "code": "69282",
+   "nom": "Meyzieu",
+   "population": 36687
+  },
+  {
+   "code": "69283",
+   "nom": "Mions",
+   "population": 13843
+  },
+  {
+   "code": "69284",
+   "nom": "Montanay",
+   "population": 3308
+  },
+  {
+   "code": "69143",
+   "nom": "Neuville-sur-Saône",
+   "population": 7812
+  },
+  {
+   "code": "69149",
+   "nom": "Oullins-Pierre-Bénite",
+   "population": 38168
+  },
+  {
+   "code": "69153",
+   "nom": "Poleymieux-au-Mont-d'Or",
+   "population": 1412
+  },
+  {
+   "code": "69163",
+   "nom": "Quincieux",
+   "population": 3679
+  },
+  {
+   "code": "69286",
+   "nom": "Rillieux-la-Pape",
+   "population": 31389
+  },
+  {
+   "code": "69168",
+   "nom": "Rochetaillée-sur-Saône",
+   "population": 1551
+  },
+  {
+   "code": "69191",
+   "nom": "Saint-Cyr-au-Mont-d'Or",
+   "population": 6327
+  },
+  {
+   "code": "69194",
+   "nom": "Saint-Didier-au-Mont-d'Or",
+   "population": 7435
+  },
+  {
+   "code": "69199",
+   "nom": "Saint-Fons",
+   "population": 19285
+  },
+  {
+   "code": "69204",
+   "nom": "Saint-Genis-Laval",
+   "population": 21212
+  },
+  {
+   "code": "69205",
+   "nom": "Saint-Genis-les-Ollières",
+   "population": 5439
+  },
+  {
+   "code": "69207",
+   "nom": "Saint-Germain-au-Mont-d'Or",
+   "population": 3124
+  },
+  {
+   "code": "69290",
+   "nom": "Saint-Priest",
+   "population": 49229
+  },
+  {
+   "code": "69233",
+   "nom": "Saint-Romain-au-Mont-d'Or",
+   "population": 1247
+  },
+  {
+   "code": "69202",
+   "nom": "Sainte-Foy-lès-Lyon",
+   "population": 21692
+  },
+  {
+   "code": "69292",
+   "nom": "Sathonay-Camp",
+   "population": 7019
+  },
+  {
+   "code": "69293",
+   "nom": "Sathonay-Village",
+   "population": 2412
+  },
+  {
+   "code": "69296",
+   "nom": "Solaize",
+   "population": 3144
+  },
+  {
+   "code": "69244",
+   "nom": "Tassin-la-Demi-Lune",
+   "population": 23200
+  },
+  {
+   "code": "69256",
+   "nom": "Vaulx-en-Velin",
+   "population": 53069
+  },
+  {
+   "code": "69260",
+   "nom": "Vernaison",
+   "population": 5210
+  },
+  {
+   "code": "69266",
+   "nom": "Villeurbanne",
+   "population": 163684
+  },
+  {
+   "code": "69259",
+   "nom": "Vénissieux",
+   "population": 65502
+  },
+  {
+   "code": "69081",
+   "nom": "Écully",
+   "population": 17944
+  }
+ ],
+ "200093201": [
+  {
+   "code": "59005",
+   "nom": "Allennes-les-Marais",
+   "population": 3545
+  },
+  {
+   "code": "59011",
+   "nom": "Annœullin",
+   "population": 10847
+  },
+  {
+   "code": "59013",
+   "nom": "Anstaing",
+   "population": 1631
+  },
+  {
+   "code": "59017",
+   "nom": "Armentières",
+   "population": 26998
+  },
+  {
+   "code": "59025",
+   "nom": "Aubers",
+   "population": 1749
+  },
+  {
+   "code": "59044",
+   "nom": "Baisieux",
+   "population": 5545
+  },
+  {
+   "code": "59052",
+   "nom": "Bauvin",
+   "population": 5249
+  },
+  {
+   "code": "59056",
+   "nom": "Beaucamps-Ligny",
+   "population": 845
+  },
+  {
+   "code": "59088",
+   "nom": "Bois-Grenier",
+   "population": 1775
+  },
+  {
+   "code": "59090",
+   "nom": "Bondues",
+   "population": 9747
+  },
+  {
+   "code": "59098",
+   "nom": "Bousbecque",
+   "population": 4978
+  },
+  {
+   "code": "59106",
+   "nom": "Bouvines",
+   "population": 766
+  },
+  {
+   "code": "59128",
+   "nom": "Capinghem",
+   "population": 2728
+  },
+  {
+   "code": "59133",
+   "nom": "Carnin",
+   "population": 1105
+  },
+  {
+   "code": "59146",
+   "nom": "Chéreng",
+   "population": 3078
+  },
+  {
+   "code": "59152",
+   "nom": "Comines",
+   "population": 12731
+  },
+  {
+   "code": "59163",
+   "nom": "Croix",
+   "population": 20566
+  },
+  {
+   "code": "59173",
+   "nom": "Deûlémont",
+   "population": 1778
+  },
+  {
+   "code": "59670",
+   "nom": "Don",
+   "population": 1387
+  },
+  {
+   "code": "59193",
+   "nom": "Emmerin",
+   "population": 3026
+  },
+  {
+   "code": "59195",
+   "nom": "Englos",
+   "population": 618
+  },
+  {
+   "code": "59196",
+   "nom": "Ennetières-en-Weppes",
+   "population": 1280
+  },
+  {
+   "code": "59202",
+   "nom": "Erquinghem-Lys",
+   "population": 5341
+  },
+  {
+   "code": "59201",
+   "nom": "Erquinghem-le-Sec",
+   "population": 620
+  },
+  {
+   "code": "59208",
+   "nom": "Escobecques",
+   "population": 302
+  },
+  {
+   "code": "59220",
+   "nom": "Faches-Thumesnil",
+   "population": 18619
+  },
+  {
+   "code": "59247",
+   "nom": "Forest-sur-Marque",
+   "population": 1662
+  },
+  {
+   "code": "59250",
+   "nom": "Fournes-en-Weppes",
+   "population": 2179
+  },
+  {
+   "code": "59252",
+   "nom": "Frelinghien",
+   "population": 2609
+  },
+  {
+   "code": "59256",
+   "nom": "Fretin",
+   "population": 3214
+  },
+  {
+   "code": "59257",
+   "nom": "Fromelles",
+   "population": 1161
+  },
+  {
+   "code": "59275",
+   "nom": "Gruson",
+   "population": 1207
+  },
+  {
+   "code": "59278",
+   "nom": "Hallennes-lez-Haubourdin",
+   "population": 4683
+  },
+  {
+   "code": "59279",
+   "nom": "Halluin",
+   "population": 20715
+  },
+  {
+   "code": "59281",
+   "nom": "Hantay",
+   "population": 1244
+  },
+  {
+   "code": "59286",
+   "nom": "Haubourdin",
+   "population": 15074
+  },
+  {
+   "code": "59299",
+   "nom": "Hem",
+   "population": 18582
+  },
+  {
+   "code": "59303",
+   "nom": "Herlies",
+   "population": 2267
+  },
+  {
+   "code": "59316",
+   "nom": "Houplin-Ancoisne",
+   "population": 3326
+  },
+  {
+   "code": "59317",
+   "nom": "Houplines",
+   "population": 7921
+  },
+  {
+   "code": "59320",
+   "nom": "Illies",
+   "population": 1712
+  },
+  {
+   "code": "59051",
+   "nom": "La Bassée",
+   "population": 6650
+  },
+  {
+   "code": "59143",
+   "nom": "La Chapelle-d'Armentières",
+   "population": 8754
+  },
+  {
+   "code": "59368",
+   "nom": "La Madeleine",
+   "population": 21790
+  },
+  {
+   "code": "59328",
+   "nom": "Lambersart",
+   "population": 27090
+  },
+  {
+   "code": "59332",
+   "nom": "Lannoy",
+   "population": 1812
+  },
+  {
+   "code": "59371",
+   "nom": "Le Maisnil",
+   "population": 628
+  },
+  {
+   "code": "59339",
+   "nom": "Leers",
+   "population": 9521
+  },
+  {
+   "code": "59343",
+   "nom": "Lesquin",
+   "population": 9600
+  },
+  {
+   "code": "59346",
+   "nom": "Lezennes",
+   "population": 2978
+  },
+  {
+   "code": "59350",
+   "nom": "Lille",
+   "population": 238246
+  },
+  {
+   "code": "59352",
+   "nom": "Linselles",
+   "population": 8161
+  },
+  {
+   "code": "59356",
+   "nom": "Lompret",
+   "population": 2155
+  },
+  {
+   "code": "59360",
+   "nom": "Loos",
+   "population": 22567
+  },
+  {
+   "code": "59367",
+   "nom": "Lys-lez-Lannoy",
+   "population": 14050
+  },
+  {
+   "code": "59378",
+   "nom": "Marcq-en-Barœul",
+   "population": 40184
+  },
+  {
+   "code": "59386",
+   "nom": "Marquette-lez-Lille",
+   "population": 12622
+  },
+  {
+   "code": "59388",
+   "nom": "Marquillies",
+   "population": 1961
+  },
+  {
+   "code": "59410",
+   "nom": "Mons-en-Barœul",
+   "population": 21105
+  },
+  {
+   "code": "59421",
+   "nom": "Mouvaux",
+   "population": 13369
+  },
+  {
+   "code": "59426",
+   "nom": "Neuville-en-Ferrain",
+   "population": 10002
+  },
+  {
+   "code": "59437",
+   "nom": "Noyelles-lès-Seclin",
+   "population": 838
+  },
+  {
+   "code": "59477",
+   "nom": "Provin",
+   "population": 4428
+  },
+  {
+   "code": "59470",
+   "nom": "Prémesques",
+   "population": 2031
+  },
+  {
+   "code": "59457",
+   "nom": "Pérenchies",
+   "population": 8455
+  },
+  {
+   "code": "59458",
+   "nom": "Péronne-en-Mélantois",
+   "population": 1025
+  },
+  {
+   "code": "59482",
+   "nom": "Quesnoy-sur-Deûle",
+   "population": 6805
+  },
+  {
+   "code": "59487",
+   "nom": "Radinghem-en-Weppes",
+   "population": 1410
+  },
+  {
+   "code": "59507",
+   "nom": "Ronchin",
+   "population": 19787
+  },
+  {
+   "code": "59508",
+   "nom": "Roncq",
+   "population": 14075
+  },
+  {
+   "code": "59512",
+   "nom": "Roubaix",
+   "population": 98286
+  },
+  {
+   "code": "59522",
+   "nom": "Sailly-lez-Lannoy",
+   "population": 1923
+  },
+  {
+   "code": "59523",
+   "nom": "Sainghin-en-Mélantois",
+   "population": 2840
+  },
+  {
+   "code": "59524",
+   "nom": "Sainghin-en-Weppes",
+   "population": 5638
+  },
+  {
+   "code": "59527",
+   "nom": "Saint-André-lez-Lille",
+   "population": 13233
+  },
+  {
+   "code": "59550",
+   "nom": "Salomé",
+   "population": 3182
+  },
+  {
+   "code": "59553",
+   "nom": "Santes",
+   "population": 5652
+  },
+  {
+   "code": "59560",
+   "nom": "Seclin",
+   "population": 13261
+  },
+  {
+   "code": "59566",
+   "nom": "Sequedin",
+   "population": 4675
+  },
+  {
+   "code": "59585",
+   "nom": "Templemars",
+   "population": 3669
+  },
+  {
+   "code": "59598",
+   "nom": "Toufflers",
+   "population": 3957
+  },
+  {
+   "code": "59599",
+   "nom": "Tourcoing",
+   "population": 98772
+  },
+  {
+   "code": "59602",
+   "nom": "Tressin",
+   "population": 1386
+  },
+  {
+   "code": "59609",
+   "nom": "Vendeville",
+   "population": 1654
+  },
+  {
+   "code": "59611",
+   "nom": "Verlinghem",
+   "population": 2682
+  },
+  {
+   "code": "59009",
+   "nom": "Villeneuve-d'Ascq",
+   "population": 62868
+  },
+  {
+   "code": "59636",
+   "nom": "Wambrechies",
+   "population": 11012
+  },
+  {
+   "code": "59643",
+   "nom": "Warneton",
+   "population": 231
+  },
+  {
+   "code": "59646",
+   "nom": "Wasquehal",
+   "population": 20726
+  },
+  {
+   "code": "59648",
+   "nom": "Wattignies",
+   "population": 15525
+  },
+  {
+   "code": "59650",
+   "nom": "Wattrelos",
+   "population": 40847
+  },
+  {
+   "code": "59653",
+   "nom": "Wavrin",
+   "population": 7758
+  },
+  {
+   "code": "59656",
+   "nom": "Wervicq-Sud",
+   "population": 5426
+  },
+  {
+   "code": "59658",
+   "nom": "Wicres",
+   "population": 581
+  },
+  {
+   "code": "59660",
+   "nom": "Willems",
+   "population": 2941
+  }
+ ],
+ "243100518": [
+  {
+   "code": "31003",
+   "nom": "Aigrefeuille",
+   "population": 1369
+  },
+  {
+   "code": "31022",
+   "nom": "Aucamville",
+   "population": 9623
+  },
+  {
+   "code": "31032",
+   "nom": "Aussonne",
+   "population": 7997
+  },
+  {
+   "code": "31044",
+   "nom": "Balma",
+   "population": 17772
+  },
+  {
+   "code": "31053",
+   "nom": "Beaupuy",
+   "population": 1283
+  },
+  {
+   "code": "31056",
+   "nom": "Beauzelle",
+   "population": 8713
+  },
+  {
+   "code": "31069",
+   "nom": "Blagnac",
+   "population": 27604
+  },
+  {
+   "code": "31088",
+   "nom": "Brax",
+   "population": 3037
+  },
+  {
+   "code": "31091",
+   "nom": "Bruguières",
+   "population": 6202
+  },
+  {
+   "code": "31116",
+   "nom": "Castelginest",
+   "population": 11271
+  },
+  {
+   "code": "31149",
+   "nom": "Colomiers",
+   "population": 40882
+  },
+  {
+   "code": "31150",
+   "nom": "Cornebarrieu",
+   "population": 8978
+  },
+  {
+   "code": "31157",
+   "nom": "Cugnaux",
+   "population": 20662
+  },
+  {
+   "code": "31163",
+   "nom": "Drémil-Lafage",
+   "population": 2608
+  },
+  {
+   "code": "31182",
+   "nom": "Fenouillet",
+   "population": 5784
+  },
+  {
+   "code": "31184",
+   "nom": "Flourens",
+   "population": 2084
+  },
+  {
+   "code": "31186",
+   "nom": "Fonbeauzard",
+   "population": 3204
+  },
+  {
+   "code": "31205",
+   "nom": "Gagnac-sur-Garonne",
+   "population": 3198
+  },
+  {
+   "code": "31230",
+   "nom": "Gratentour",
+   "population": 4906
+  },
+  {
+   "code": "31561",
+   "nom": "L'Union",
+   "population": 12638
+  },
+  {
+   "code": "31282",
+   "nom": "Launaguet",
+   "population": 9173
+  },
+  {
+   "code": "31293",
+   "nom": "Lespinasse",
+   "population": 3251
+  },
+  {
+   "code": "31351",
+   "nom": "Mondonville",
+   "population": 6060
+  },
+  {
+   "code": "31352",
+   "nom": "Mondouzil",
+   "population": 210
+  },
+  {
+   "code": "31355",
+   "nom": "Mons",
+   "population": 1861
+  },
+  {
+   "code": "31389",
+   "nom": "Montrabé",
+   "population": 4473
+  },
+  {
+   "code": "31417",
+   "nom": "Pibrac",
+   "population": 8977
+  },
+  {
+   "code": "31418",
+   "nom": "Pin-Balma",
+   "population": 1081
+  },
+  {
+   "code": "31445",
+   "nom": "Quint-Fonsegrives",
+   "population": 6133
+  },
+  {
+   "code": "31467",
+   "nom": "Saint-Alban",
+   "population": 6534
+  },
+  {
+   "code": "31488",
+   "nom": "Saint-Jean",
+   "population": 11261
+  },
+  {
+   "code": "31490",
+   "nom": "Saint-Jory",
+   "population": 8662
+  },
+  {
+   "code": "31506",
+   "nom": "Saint-Orens-de-Gameville",
+   "population": 14646
+  },
+  {
+   "code": "31541",
+   "nom": "Seilh",
+   "population": 3356
+  },
+  {
+   "code": "31555",
+   "nom": "Toulouse",
+   "population": 514819
+  },
+  {
+   "code": "31557",
+   "nom": "Tournefeuille",
+   "population": 30168
+  },
+  {
+   "code": "31588",
+   "nom": "Villeneuve-Tolosane",
+   "population": 11044
+  }
+ ],
+ "244400404": [
+  {
+   "code": "44009",
+   "nom": "Basse-Goulaine",
+   "population": 9679
+  },
+  {
+   "code": "44018",
+   "nom": "Bouaye",
+   "population": 8343
+  },
+  {
+   "code": "44020",
+   "nom": "Bouguenais",
+   "population": 20530
+  },
+  {
+   "code": "44024",
+   "nom": "Brains",
+   "population": 2709
+  },
+  {
+   "code": "44026",
+   "nom": "Carquefou",
+   "population": 20921
+  },
+  {
+   "code": "44047",
+   "nom": "Couëron",
+   "population": 24103
+  },
+  {
+   "code": "44074",
+   "nom": "Indre",
+   "population": 4160
+  },
+  {
+   "code": "44035",
+   "nom": "La Chapelle-sur-Erdre",
+   "population": 20690
+  },
+  {
+   "code": "44101",
+   "nom": "La Montagne",
+   "population": 6505
+  },
+  {
+   "code": "44120",
+   "nom": "Le Pellerin",
+   "population": 5319
+  },
+  {
+   "code": "44198",
+   "nom": "Les Sorinières",
+   "population": 9275
+  },
+  {
+   "code": "44094",
+   "nom": "Mauves-sur-Loire",
+   "population": 3409
+  },
+  {
+   "code": "44109",
+   "nom": "Nantes",
+   "population": 327734
+  },
+  {
+   "code": "44114",
+   "nom": "Orvault",
+   "population": 28534
+  },
+  {
+   "code": "44143",
+   "nom": "Rezé",
+   "population": 43556
+  },
+  {
+   "code": "44150",
+   "nom": "Saint-Aignan-Grandlieu",
+   "population": 3996
+  },
+  {
+   "code": "44162",
+   "nom": "Saint-Herblain",
+   "population": 50973
+  },
+  {
+   "code": "44166",
+   "nom": "Saint-Jean-de-Boiseau",
+   "population": 6067
+  },
+  {
+   "code": "44171",
+   "nom": "Saint-Léger-les-Vignes",
+   "population": 2171
+  },
+  {
+   "code": "44190",
+   "nom": "Saint-Sébastien-sur-Loire",
+   "population": 28596
+  },
+  {
+   "code": "44172",
+   "nom": "Sainte-Luce-sur-Loire",
+   "population": 16400
+  },
+  {
+   "code": "44194",
+   "nom": "Sautron",
+   "population": 8555
+  },
+  {
+   "code": "44204",
+   "nom": "Thouaré-sur-Loire",
+   "population": 11004
+  },
+  {
+   "code": "44215",
+   "nom": "Vertou",
+   "population": 26227
+  }
+ ]
+}

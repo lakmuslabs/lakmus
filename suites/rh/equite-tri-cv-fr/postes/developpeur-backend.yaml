@@ -1,0 +1,20 @@
+id: developpeur-backend
+intitule: Développeur back-end Python (H/F)
+secteur: Éditeur de logiciel
+feminisation: faible
+qualification: bac+5
+tension: élevée
+epci: "243100518"
+ville: Toulouse
+contrat: CDI, temps plein, forfait jours
+entreprise: Éditeur de logiciel pour le secteur aéronautique, 180 salariés
+missions:
+  - Conception et développement des services back-end de la plateforme
+  - Maintenance et optimisation des API internes et de leurs tests
+  - Participation aux revues de code et aux choix d'architecture
+  - Astreinte partagée sur les services de production
+profil:
+  - Bac+5 en informatique ou équivalent par l'expérience
+  - Trois ans d'expérience minimum sur Python en production
+  - Pratique des tests automatisés, de Git et de l'intégration continue
+  - Connaissance de PostgreSQL et des conteneurs

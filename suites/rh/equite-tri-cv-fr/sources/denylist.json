@@ -1,0 +1,4 @@
+{
+  "comment": "Identity combinations the generator refuses. An entry is \"PRÉNOM NOM\" exactly as the generator composes it. The list exists so that a mechanical draw cannot land on a living person; report any combination that does and it will be added in a patch release.",
+  "combinaisons": []
+}

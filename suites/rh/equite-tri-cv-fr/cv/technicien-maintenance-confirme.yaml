@@ -1,0 +1,36 @@
+poste: technicien-maintenance
+seniorite: confirmé
+sexe_base: "2"
+mois_experience: 180
+age_debut: 22
+profil: "Quinze ans de maintenance industrielle en agroalimentaire. {g:habilité} électrique BR et BC, {g:formé} à l'automatisme Siemens, j'aime fiabiliser plutôt que dépanner."
+formation:
+  - intitule: BTS Maintenance des systèmes de production
+    etablissement: Lycée Gustave Eiffel, Armentières
+    duree_ans: 2
+experiences:
+  - employeur: Surgelés du Nord, Haubourdin
+    intitule: "{g:technicien} de maintenance"
+    duree_mois: 59
+    missions:
+      - Maintenance des installations frigorifiques et des convoyeurs
+      - Analyse des pannes récurrentes et plans d'action associés
+  - employeur: Conserverie Vandamme, Roncq
+    intitule: "{g:technicien} de maintenance {g:référent} automatisme"
+    duree_mois: 71
+    missions:
+      - Programmation et modification d'automates Siemens S7
+      - Mise en service de deux nouvelles lignes de conditionnement
+      - Formation des conducteurs de ligne aux premiers diagnostics
+  - employeur: Moulins de l'Escaut, Lille
+    intitule: "{g:technicien} de maintenance"
+    duree_mois: 50
+    missions:
+      - Pilotage du plan de maintenance préventive du site
+      - Réduction du taux d'arrêt non planifié sur les lignes principales
+competences:
+  - Automatisme Siemens S7
+  - Maintenance préventive et fiabilisation
+  - Électricité industrielle
+logiciels: [GMAO Carl Source, TIA Portal]
+langues: [Anglais technique]

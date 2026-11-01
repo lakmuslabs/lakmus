@@ -1,0 +1,37 @@
+poste: comptable
+seniorite: senior
+sexe_base: "2"
+mois_experience: 360
+age_debut: 22
+profil: "Trente ans de comptabilité d'entreprise, dont quinze sur des groupes multi-sites. {g:habitué} aux changements de système, je sécurise les clôtures et je forme les équipes."
+formation:
+  - intitule: DECF — Diplôme d'études comptables et financières
+    etablissement: Lycée Carcouët, Nantes
+    duree_ans: 2
+experiences:
+  - employeur: Transports Brunet, Vertou
+    intitule: Comptable
+    duree_mois: 94
+    missions:
+      - Comptabilité générale et auxiliaire d'une PME de 90 salariés
+      - Paie de 90 collaborateurs et déclarations sociales
+  - employeur: Groupe Martinière, Nantes
+    intitule: Comptable général
+    duree_mois: 143
+    missions:
+      - Clôtures mensuelles de quatre filiales
+      - Pilotage de la migration vers un ERP unique
+      - Relation avec les commissaires aux comptes et l'administration fiscale
+  - employeur: Ouest Négoce, Orvault
+    intitule: Comptable général
+    duree_mois: 123
+    missions:
+      - Tenue de trois sociétés du groupe et comptes consolidés
+      - Encadrement fonctionnel de trois comptables
+      - Mise en conformité de la facturation électronique
+competences:
+  - Clôtures et consolidation
+  - Migration de système comptable
+  - Fiscalité et relations avec les tiers
+logiciels: [SAP FI, Cegid, Excel avancé]
+langues: [Anglais technique]

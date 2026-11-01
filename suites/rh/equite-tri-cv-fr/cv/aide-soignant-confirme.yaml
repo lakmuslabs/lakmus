@@ -1,0 +1,36 @@
+poste: aide-soignant
+seniorite: confirmé
+sexe_base: "1"
+mois_experience: 180
+age_debut: 22
+profil: "Quinze ans auprès de personnes âgées dépendantes. {g:formé} à la prise en charge des troubles cognitifs, j'accompagne aussi les nouveaux arrivants dans le service."
+formation:
+  - intitule: Diplôme d'État d'aide-soignant
+    etablissement: IFAS Lyon-Sud
+    duree_ans: 1
+experiences:
+  - employeur: EHPAD Les Cèdres, Caluire-et-Cuire
+    intitule: "Aide-{g:soignant}"
+    duree_mois: 70
+    missions:
+      - Soins quotidiens en unité protégée de quatorze places
+      - Accompagnement des résidents atteints de la maladie d'Alzheimer
+  - employeur: Centre hospitalier Saint-Joseph, Lyon
+    intitule: "Aide-{g:soignant} en gériatrie aiguë"
+    duree_mois: 62
+    missions:
+      - Prise en charge de patients en soins de longue durée
+      - Participation aux projets de vie individualisés
+      - Tutorat des élèves aides-soignants en stage
+  - employeur: EHPAD Beauséjour, Bron
+    intitule: "Aide-{g:soignant} {g:référent} hygiène"
+    duree_mois: 48
+    missions:
+      - Application et suivi des protocoles d'hygiène du service
+      - Animation des temps de transmission avec l'équipe infirmière
+competences:
+  - Gériatrie et troubles cognitifs
+  - Protocoles d'hygiène
+  - Tutorat des stagiaires
+logiciels: [Netsoins, Titan]
+langues: []

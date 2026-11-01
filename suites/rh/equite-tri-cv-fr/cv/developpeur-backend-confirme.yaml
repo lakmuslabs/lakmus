@@ -1,0 +1,37 @@
+poste: developpeur-backend
+seniorite: confirmé
+sexe_base: "2"
+mois_experience: 180
+age_debut: 25
+profil: "Quinze ans de développement back-end, dont dix sur des services en production avec astreinte. {g:habitué} à reprendre des bases de code existantes sans tout réécrire."
+formation:
+  - intitule: Master informatique, génie logiciel
+    etablissement: Université Toulouse III
+    duree_ans: 2
+experiences:
+  - employeur: Néocom Services, Toulouse
+    intitule: "{g:développeur} logiciel"
+    duree_mois: 53
+    missions:
+      - Développement d'un back-office de télécoms en Python et Django
+      - Reprise de la couche d'accès aux données et réduction du temps de réponse
+  - employeur: Aérodata, Colomiers
+    intitule: "{g:développeur} back-end"
+    duree_mois: 65
+    missions:
+      - Conception des services de traitement de données de vol
+      - Mise en place de la supervision et des budgets d'erreur
+      - Astreinte hebdomadaire sur la plateforme de production
+  - employeur: Vallis Technologies, Toulouse
+    intitule: "{g:développeur} back-end senior"
+    duree_mois: 62
+    missions:
+      - Architecture des API internes d'une plateforme à 400 000 requêtes par jour
+      - Accompagnement de trois développeurs juniors sur les revues de code
+      - Découpage progressif d'un monolithe en services
+competences:
+  - Python, Django, FastAPI
+  - Conception d'API et de bases de données
+  - Observabilité et exploitation
+logiciels: [Git, Docker, Kubernetes, PostgreSQL]
+langues: [Anglais courant]

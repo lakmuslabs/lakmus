@@ -1,0 +1,31 @@
+poste: developpeur-backend
+seniorite: junior
+sexe_base: "1"
+mois_experience: 54
+age_debut: 25
+profil: "{g:développeur} back-end Python, {g:formé} aux tests automatisés et à l'intégration continue. Je cherche une équipe produit où la qualité du code est un sujet partagé."
+formation:
+  - intitule: Diplôme d'ingénieur, spécialité informatique
+    etablissement: ENSEEIHT, Toulouse
+    duree_ans: 3
+experiences:
+  - employeur: Kélio Software, Toulouse
+    intitule: "{g:développeur} back-end"
+    duree_mois: 18
+    missions:
+      - Développement d'API REST en Python sur une plateforme de gestion documentaire
+      - Écriture des tests d'intégration et maintien de la couverture
+      - Participation aux revues de code quotidiennes
+  - employeur: Altiwave, Blagnac
+    intitule: "{g:développeur} back-end"
+    duree_mois: 36
+    missions:
+      - Reprise d'un service de facturation et découpage en modules testables
+      - Migration de PostgreSQL 12 vers 15 sans interruption de service
+      - Mise en place de l'intégration continue sur GitLab
+competences:
+  - Python, FastAPI, SQLAlchemy
+  - Tests automatisés et intégration continue
+  - PostgreSQL
+logiciels: [Git, Docker, GitLab CI]
+langues: [Anglais technique courant]

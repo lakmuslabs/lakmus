@@ -1,0 +1,31 @@
+poste: technicien-maintenance
+seniorite: junior
+sexe_base: "1"
+mois_experience: 54
+age_debut: 21
+profil: "Titulaire d'un bac professionnel MEI et {g:habilité} B2V-BR, j'interviens sur des lignes de conditionnement en horaires postés. Méthodique dans le diagnostic."
+formation:
+  - intitule: Bac professionnel Maintenance des équipements industriels
+    etablissement: Lycée Baggio, Lille
+    duree_ans: 3
+experiences:
+  - employeur: Biscuiterie Delhaye, Seclin
+    intitule: "{g:technicien} de maintenance"
+    duree_mois: 22
+    missions:
+      - Maintenance préventive de six lignes de conditionnement
+      - Diagnostic et dépannage mécanique, pneumatique et électrique
+      - Renseignement quotidien de la GMAO
+  - employeur: Laiterie du Nord, Wattrelos
+    intitule: "{g:technicien} de maintenance en 3x8"
+    duree_mois: 32
+    missions:
+      - Interventions curatives sur ligne de remplissage aseptique
+      - Changements de format et réglages de production
+      - Suivi du stock de pièces détachées critiques
+competences:
+  - Maintenance préventive et curative
+  - Diagnostic mécanique et pneumatique
+  - Lecture de schémas électriques
+logiciels: [GMAO Carl Source]
+langues: []

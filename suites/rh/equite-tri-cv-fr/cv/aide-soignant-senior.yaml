@@ -1,0 +1,36 @@
+poste: aide-soignant
+seniorite: senior
+sexe_base: "2"
+mois_experience: 360
+age_debut: 22
+profil: "Trente ans d'accompagnement en établissement et à domicile. {g:reconnu} pour le calme en situation difficile et la qualité des transmissions."
+formation:
+  - intitule: Certificat d'aptitude aux fonctions d'aide-soignant
+    etablissement: IFAS Édouard Herriot, Lyon
+    duree_ans: 1
+experiences:
+  - employeur: Maison de retraite Sainte-Marie, Lyon
+    intitule: "Aide-{g:soignant}"
+    duree_mois: 131
+    missions:
+      - Soins d'hygiène et accompagnement de résidents très dépendants
+      - Participation à l'ouverture d'une unité de vie protégée
+  - employeur: Service de soins à domicile ADMR, Rhône
+    intitule: "Aide-{g:soignant} à domicile"
+    duree_mois: 107
+    missions:
+      - Tournées quotidiennes auprès de quinze personnes âgées
+      - Coordination avec les familles et les infirmiers libéraux
+  - employeur: EHPAD Les Magnolias, Vénissieux
+    intitule: "Aide-{g:soignant}"
+    duree_mois: 122
+    missions:
+      - Soins quotidiens en unité de soins de longue durée
+      - Accompagnement de fin de vie et soutien aux familles
+      - Tutorat des élèves aides-soignants
+competences:
+  - Accompagnement de fin de vie
+  - Soins à domicile et en établissement
+  - Tutorat
+logiciels: [Netsoins]
+langues: []

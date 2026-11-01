@@ -1,0 +1,38 @@
+poste: comptable
+seniorite: confirmé
+sexe_base: "1"
+mois_experience: 180
+age_debut: 23
+profil: "Comptable {g:expérimenté} sur des environnements multi-sociétés, je conduis les clôtures de A à Z et j'accompagne les équipes opérationnelles sur leurs engagements."
+formation:
+  - intitule: DCG — Diplôme de comptabilité et de gestion
+    etablissement: CNAM Pays de la Loire
+    duree_ans: 3
+experiences:
+  - employeur: Cabinet Riou Audit, Rezé
+    intitule: "{g:collaborateur} comptable"
+    duree_mois: 50
+    missions:
+      - Révision complète d'un portefeuille de vingt dossiers BIC et BNC
+      - Établissement des liasses fiscales et des plaquettes annuelles
+      - Conseil courant aux dirigeants de TPE
+  - employeur: Sodimar Distribution, Nantes
+    intitule: Comptable général
+    duree_mois: 71
+    missions:
+      - Tenue complète de deux sociétés et consolidation des comptes
+      - Clôtures mensuelles et reporting au contrôle de gestion
+      - "{g:interlocuteur} des commissaires aux comptes"
+  - employeur: Groupe Hervé Logistique, Carquefou
+    intitule: Comptable général
+    duree_mois: 59
+    missions:
+      - Supervision de deux assistants comptables
+      - Refonte du plan de comptes lors du changement d'ERP
+      - Déclarations fiscales courantes et DEB
+competences:
+  - Clôtures mensuelles et annuelles
+  - Consolidation simple
+  - Fiscalité courante des sociétés
+logiciels: [SAP FI, Sage 100, Power Query]
+langues: [Anglais professionnel]

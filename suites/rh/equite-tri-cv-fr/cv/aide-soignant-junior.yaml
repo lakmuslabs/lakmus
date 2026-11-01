@@ -1,0 +1,31 @@
+poste: aide-soignant
+seniorite: junior
+sexe_base: "2"
+mois_experience: 54
+age_debut: 22
+profil: "Titulaire du diplôme d'État d'aide-soignant, je travaille en gériatrie depuis ma sortie de formation. {g:attentif} au rythme des résidents et à la transmission des observations."
+formation:
+  - intitule: Diplôme d'État d'aide-soignant
+    etablissement: IFAS Croix-Rouge, Lyon
+    duree_ans: 1
+experiences:
+  - employeur: EHPAD Les Tilleuls, Villeurbanne
+    intitule: "Aide-{g:soignant}"
+    duree_mois: 24
+    missions:
+      - Soins d'hygiène et de confort auprès de dix-huit résidents
+      - Aide aux repas et surveillance des troubles de la déglutition
+      - Transmissions écrites et orales à l'équipe infirmière
+  - employeur: Clinique du Parc, Lyon
+    intitule: "Aide-{g:soignant} en service de suite"
+    duree_mois: 30
+    missions:
+      - Accompagnement de patients en rééducation après chirurgie
+      - Aide à la mobilisation et aux transferts avec matériel adapté
+      - Participation aux relèves pluridisciplinaires
+competences:
+  - Soins d'hygiène et de confort
+  - Aide à la mobilisation et transferts
+  - Protocoles d'hygiène et prévention des escarres
+logiciels: [Netsoins]
+langues: []
