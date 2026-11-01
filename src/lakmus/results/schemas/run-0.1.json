@@ -3,6 +3,31 @@
     "Cost": {
       "additionalProperties": false,
       "properties": {
+        "pricing_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricing As Of"
+        },
+        "pricing_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricing Source"
+        },
         "tokens_in": {
           "default": 0,
           "minimum": 0,
@@ -458,6 +483,8 @@
     "cost": {
       "$ref": "#/$defs/Cost",
       "default": {
+        "pricing_as_of": null,
+        "pricing_source": null,
         "tokens_in": 0,
         "tokens_out": 0,
         "usd": null

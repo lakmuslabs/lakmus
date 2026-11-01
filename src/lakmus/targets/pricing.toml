@@ -1,0 +1,21 @@
+# Prices for computing cost_usd in a run file.
+#
+# Matching is exact on (adapter, model). No prefix matching, no inheritance: a price that silently
+# applied to a model it was not written for is how a cost figure becomes fiction. A model absent
+# from this table costs null in the run file, never an estimate.
+#
+# Every entry carries the date it was true on and where it came from, because providers change
+# prices under an unchanged model name. A run that costs anything records both alongside the
+# figure, so a reader can tell how stale it is.
+#
+# This table ships empty on purpose. A price written from memory is exactly the fiction above, and
+# a wheel released today would carry it for as long as the wheel lives. Add entries from a cited
+# provider page, or pass your own table with --pricing.
+#
+# [[model]]
+# adapter = "openai"
+# model = "gpt-x"
+# input_per_mtok_usd = 2.50
+# output_per_mtok_usd = 10.00
+# as_of = 2026-10-01
+# source = "https://openai.com/api/pricing"

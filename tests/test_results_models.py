@@ -228,7 +228,9 @@ def test_a_run_round_trips_through_its_own_json() -> None:
         pytest.param("http://[2001:db8::1]/v1", "http://[2001:db8::1]/v1", id="ipv6-bare"),
         pytest.param("HTTPS://API.Example.com/v1", "https://api.example.com/v1", id="case"),
         pytest.param(
-            "https://api.example.com/v1#frag", "https://api.example.com/v1", id="fragment"
+            "https://api.example.com/v1#llama-3",
+            "https://api.example.com/v1#llama-3",
+            id="fragment-names-the-model-and-is-kept",
         ),
         pytest.param("//user:pw@api.example.com/v1", "//api.example.com/v1", id="no-scheme"),
     ],
@@ -242,7 +244,7 @@ def test_an_identity_is_reduced_to_one_publishable_spelling(identity: str, expec
 def test_two_spellings_of_one_endpoint_digest_the_same() -> None:
     """Otherwise a cache miss, and two runs of one target that look incomparable."""
     first = TargetFingerprint.create(
-        adapter="openai-compatible", kind="model", identity="HTTPS://API.Example.com/v1#x"
+        adapter="openai-compatible", kind="model", identity="HTTPS://API.Example.com/v1"
     )
     second = TargetFingerprint.create(
         adapter="openai-compatible", kind="model", identity="https://api.example.com/v1"
@@ -340,3 +342,15 @@ def test_a_run_file_is_valid_json() -> None:
     document = _run().model_dump_json_document()
 
     assert json.loads(json.dumps(document, allow_nan=False)) == document
+
+
+def test_two_models_behind_one_endpoint_do_not_share_a_fingerprint() -> None:
+    """Why the fragment survives sanitisation while userinfo and the query do not."""
+    first = TargetFingerprint.create(
+        adapter="openai-compatible", kind="model", identity="https://host/v1#llama-3"
+    )
+    second = TargetFingerprint.create(
+        adapter="openai-compatible", kind="model", identity="https://host/v1#mistral-small"
+    )
+
+    assert first.sha256 != second.sha256

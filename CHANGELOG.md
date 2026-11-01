@@ -37,6 +37,16 @@ specification and in each run file. Changes to either are called out here under
   from a URL, an identity that assigns a secret is refused, and so is a parameter named like
   one. Scores that are not finite numbers are refused at the scorer boundary, so a run file is
   always valid JSON.
+- The `Target` protocol, and the `openai`, `openai-compatible`, `ollama` and `anthropic`
+  adapters. An adapter never retries: it raises for a failure that affects the whole run or is
+  worth retrying, and records a failure that belongs to one case, so one bad case cannot end a
+  run.
+- `--target <adapter>:<model-or-endpoint>`, with the model behind an endpoint named after a `#`,
+  and repeatable `-P name=value` parameters that keep the type they were written with and enter
+  the target fingerprint.
+- `pricing.toml`: exact matching on adapter and model, no prefix matching, and every entry
+  carrying the date it was true on and its source. The bundled table is empty on purpose, so an
+  unpriced model reports no cost rather than a figure nobody can source.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

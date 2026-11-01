@@ -101,7 +101,15 @@ class RetryableTargetError(LakmusError):
 
 
 class TargetRateLimited(RetryableTargetError):
-    """The target refused the call for rate reasons."""
+    """The target refused the call for rate reasons.
+
+    `retry_after_s` is what the provider asked for, when it said anything. Ignoring it means the
+    engine's backoff hammers a window the provider already described.
+    """
+
+    def __init__(self, *args: object, retry_after_s: float | None = None) -> None:
+        super().__init__(*args)
+        self.retry_after_s = retry_after_s
 
 
 class TargetUnavailable(RetryableTargetError):

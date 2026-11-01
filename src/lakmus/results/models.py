@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlsplit
 
@@ -64,9 +64,15 @@ class SuiteRef(_Strict):
 def sanitise_identity(identity: str) -> str:
     """Reduce a target identity to its canonical, publishable form.
 
-    A fingerprint is published, and an endpoint URL arrives with userinfo, a query string, a
-    fragment or an upper-case scheme. None of those survive: the first two are plausible places
-    for a token, and the last two would give two spellings of one endpoint two different digests.
+    A fingerprint is published, and an endpoint URL arrives with userinfo, a query string or an
+    upper-case scheme. Userinfo and the query do not survive — both are plausible places for a
+    token — and the scheme and host are lower-cased, so two spellings of one endpoint do not
+    digest differently.
+
+    The fragment is kept, which userinfo and the query are not. It is how a target names the model
+    behind an endpoint (`https://host/v1#llama-3`), so dropping it would let two different models
+    share a fingerprint — a failure in the one field that decides whether two results describe the
+    same thing. It is covered by the credential checks like the rest of the identity.
 
     What this cannot do is clean an identity that is not a URL — a command line, for instance.
     There is no safe general way to strip a secret out of one, so the model refuses such an
@@ -81,7 +87,8 @@ def sanitise_identity(identity: str) -> str:
     if parts.port is not None:
         host = f"{host}:{parts.port}"
     authority = f"{parts.scheme.lower()}://" if parts.scheme else "//"
-    return f"{authority}{host}{parts.path}"
+    fragment = f"#{parts.fragment}" if parts.fragment else ""
+    return f"{authority}{host}{parts.path}{fragment}"
 
 
 def canonical_parameter(value: ParameterValue) -> str:
@@ -309,10 +316,23 @@ class MetricSummary(_Measured):
 
 class Cost(_Strict):
     usd: float | None = None
-    """`None` until a price table exists: a number whose provenance cannot be stated is worse than
-    no number."""
+    """`None` when the model is absent from the price table. Never an estimate: a number whose
+    provenance cannot be stated is worse than no number."""
+    pricing_as_of: date | None = None
+    """The date the price was true on. A price changes under an unchanged model name, so a figure
+    without this is not reproducible."""
+    pricing_source: str | None = None
     tokens_in: Annotated[int, Field(ge=0)] = 0
     tokens_out: Annotated[int, Field(ge=0)] = 0
+
+    @model_validator(mode="after")
+    def _a_figure_carries_its_provenance(self) -> Self:
+        if self.usd is None:
+            if self.pricing_as_of is not None or self.pricing_source is not None:
+                raise ValueError("pricing provenance without a cost")
+        elif self.pricing_as_of is None or self.pricing_source is None:
+            raise ValueError("a cost needs the date and the source of the price it used")
+        return self
 
 
 class Latency(_Strict):
