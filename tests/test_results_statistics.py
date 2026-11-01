@@ -44,13 +44,29 @@ def test_the_point_estimate_weighs_every_case_equally() -> None:
     assert statistics.point_estimate(cases) == pytest.approx(0.5)
 
 
-def test_an_interval_needs_more_than_one_case() -> None:
-    assert statistics.bootstrap_ci([[0.5]], seed=0) is None
+def test_an_interval_needs_enough_cases_to_mean_anything() -> None:
+    """Two cases that agree would otherwise report certainty from two observations."""
     assert statistics.bootstrap_ci([], seed=0) is None
+    assert statistics.bootstrap_ci([[0.5]], seed=0) is None
+    assert statistics.bootstrap_ci([[0.5]] * 2, seed=0) is None
+
+
+@pytest.mark.parametrize(
+    ("count", "has_interval"),
+    [
+        pytest.param(statistics.MINIMUM_CASES - 1, False, id="one-case-short"),
+        pytest.param(statistics.MINIMUM_CASES, True, id="exactly-enough"),
+    ],
+)
+def test_the_floor_is_where_it_says_it_is(count: int, has_interval: bool) -> None:
+    cases = [[float(index % 2)] for index in range(count)]
+
+    assert (statistics.bootstrap_ci(cases, seed=1) is not None) is has_interval
 
 
 def test_identical_scores_give_an_interval_of_zero_width() -> None:
-    cases = [[0.25]] * 20
+    """Legitimate once there are enough of them: every resample really does give 0.25."""
+    cases = [[0.25]] * 50
 
     interval = statistics.bootstrap_ci(cases, seed=7)
 
@@ -78,7 +94,7 @@ def test_a_different_seed_gives_a_different_interval() -> None:
 
 
 def test_more_cases_narrow_the_interval() -> None:
-    few = [[float(index % 2)] for index in range(10)]
+    few = [[float(index % 2)] for index in range(statistics.MINIMUM_CASES)]
     many = [[float(index % 2)] for index in range(400)]
 
     narrow = statistics.bootstrap_ci(many, seed=5) or (0.0, 1.0)

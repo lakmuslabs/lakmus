@@ -82,6 +82,17 @@ def test_a_single_case_gets_no_interval_and_says_why() -> None:
     assert summary.conclusive is None
 
 
+def test_a_verdict_without_an_interval_does_not_claim_to_be_conclusive() -> None:
+    """Too few cases to estimate an interval is too few to say a rerun would agree."""
+    summary = summarise(
+        _observations(cases=_cases([0.01] * 5), threshold=ThresholdApplied(max=0.05)), seed=SEED
+    )
+
+    assert summary.passed is True
+    assert summary.ci95 is None
+    assert summary.conclusive is None
+
+
 def test_without_a_threshold_there_is_no_verdict() -> None:
     summary = summarise(_observations(threshold=None), seed=SEED)
 
@@ -165,7 +176,8 @@ def test_a_group_field_no_case_carries_produces_no_breakdown() -> None:
 
 
 def test_a_small_bucket_gets_no_interval() -> None:
-    cases = _cases([0.1], {"variable": "nom"}) + _cases([0.2] * 4, {"variable": "age"})
+    """A breakdown is where small buckets are the norm, so this is the common case."""
+    cases = _cases([0.1] * 3, {"variable": "nom"}) + _cases([0.2] * 25, {"variable": "age"})
 
     _, by_group = aggregate([_observations(cases=cases, group_by=("variable",))], seed=SEED)
 
@@ -202,14 +214,14 @@ def test_a_judge_scored_metric_needs_more_than_one_repeat() -> None:
 
 
 def test_a_judge_scored_metric_with_repeats_is_accepted() -> None:
-    cases = tuple(CaseObservation(case_id=f"c-{index}", scores=(0.8, 0.9)) for index in range(10))
+    cases = tuple(CaseObservation(case_id=f"c-{index}", scores=(0.8, 0.9)) for index in range(20))
 
     summary = summarise(
         MetricObservations(metric_id="helpfulness", deterministic=False, cases=cases), seed=SEED
     )
 
     assert summary.deterministic is False
-    assert summary.n_observations == 20
+    assert (summary.n_cases, summary.n_observations) == (20, 40)
     assert summary.ci95 is not None
 
 

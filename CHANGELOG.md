@@ -29,7 +29,8 @@ specification and in each run file. Changes to either are called out here under
   flag that is false when the confidence interval straddles the threshold.
 - 95% confidence intervals by a cluster bootstrap over cases, computed with a generator any
   implementation can reproduce, so an interval in a run file can be recomputed by whoever
-  reads it.
+  reads it. Below 20 scored cases there is no interval: the bootstrap covers badly on a handful
+  of observations, and two cases that happen to agree would report certainty.
 - `comparable()`: two runs are comparable when the format version, `inputs_sha256` and the
   set of configuration overrides all match. The target is deliberately not part of it.
 - A target fingerprint refuses to carry a credential: userinfo and query strings are stripped

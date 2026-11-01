@@ -14,8 +14,15 @@ from collections.abc import Sequence
 
 RESAMPLES = 1000
 LEVEL = 95.0
-MINIMUM_CASES = 2
-"""Below this, an interval would be invented rather than estimated."""
+MINIMUM_CASES = 20
+"""Below this there is no interval at all.
+
+A percentile bootstrap covers badly on a handful of observations, and the failure is quiet: two
+cases that happen to agree produce an interval of zero width, which reads as certainty. The
+bootstrap can only see variation already present in the sample, so with few cases it reports the
+sample's agreement rather than the population's. An interval nobody should trust is worse than a
+stated absence, because the note beside it never gets read.
+"""
 
 _MASK64 = (1 << 64) - 1
 _GOLDEN_GAMMA = 0x9E3779B97F4A7C15
