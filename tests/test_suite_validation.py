@@ -123,6 +123,10 @@ def _scorer_without_the_decorator(root: Path) -> None:
     )
 
 
+def _template_that_will_not_compile(root: Path) -> None:
+    (root / "prompts" / "screener.j2").write_text("{% for x in %}\n", encoding="utf-8")
+
+
 def _unknown_builtin(root: Path) -> None:
     def change(manifest: dict[str, Any]) -> None:
         manifest["metrics"][1]["scorer"] = "builtin:pair_flop"
@@ -212,6 +216,7 @@ BREAKAGES = (
     Breakage(Code.MANIFEST_FORMAT_UNSUPPORTED, _future_format),
     Breakage(Code.FILE_MISSING, _missing_case_file),
     Breakage(Code.GITATTRIBUTES_MISSING, _no_gitattributes),
+    Breakage(Code.TEMPLATE_INVALID, _template_that_will_not_compile),
     Breakage(Code.CASE_NOT_JSON, _case_is_not_json),
     Breakage(Code.CASE_WITHOUT_ID, _case_without_id),
     Breakage(Code.CASE_DUPLICATE_ID, _duplicate_case_id),
@@ -523,3 +528,13 @@ def test_loading_a_manifest_pulls_in_no_adapter(valid_suite: Path) -> None:
 
     pulled = {name for name in set(sys.modules) - before if name.startswith("lakmus.")}
     assert pulled == set()
+
+
+def test_a_template_that_will_not_compile_is_found_before_a_run(valid_suite: Path) -> None:
+    """Finding it here costs nothing; finding it at the first case costs a run."""
+    _template_that_will_not_compile(valid_suite)
+
+    findings = validate(valid_suite, scorers=BUILTIN_SCORERS)
+
+    assert findings[0].code is Code.TEMPLATE_INVALID
+    assert "will not compile" in findings[0].message

@@ -21,7 +21,15 @@ def comparable(left: RunResult, right: RunResult) -> bool:
     return _key(left) == _key(right)
 
 
-def _key(result: RunResult) -> tuple[str, str, tuple[str, ...]]:
+def _key(result: RunResult) -> tuple[str, str, tuple[tuple[str, object], ...]]:
     """The three things that have to match. Compared together rather than one `and` at a time,
-    so that the key is one expression a reader can check against the decision record."""
-    return result.lakmus_format, result.suite.inputs_sha256, result.config.overrides
+    so that the key is one expression a reader can check against the decision record.
+
+    The overrides are compared by name *and* value: two runs of one suite at different
+    temperatures measured different things.
+    """
+    return (
+        result.lakmus_format,
+        result.suite.inputs_sha256,
+        tuple(sorted(result.config.overrides.items())),
+    )

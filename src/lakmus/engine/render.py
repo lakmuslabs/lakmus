@@ -18,10 +18,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from jinja2 import StrictUndefined, TemplateError
+from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
-from lakmus.errors import SuiteInvalid
+from lakmus.errors import Code, Finding, SuiteInvalid
 from lakmus.scorers import Case
 
 Variant = Literal["a", "b"]
@@ -75,8 +75,18 @@ class Renderer:
     def __init__(self, source: str, *, expects_json: bool = False) -> None:
         try:
             self._template = _environment().from_string(source)
-        except TemplateError as exc:
-            raise SuiteInvalid(()) from exc
+        except Exception as exc:
+            # `lakmus validate` reports this as LKM-204 before a run starts; this is the backstop
+            # for a caller using the library, and it carries a finding rather than an empty one.
+            raise SuiteInvalid(
+                [
+                    Finding(
+                        code=Code.TEMPLATE_INVALID,
+                        location="target.input",
+                        message=f"the template will not compile: {type(exc).__name__}: {exc}",
+                    )
+                ]
+            ) from exc
         self.expects_json = expects_json
 
     def single(self, case: Case) -> tuple[RenderedInput, ...]:
@@ -108,7 +118,10 @@ class Renderer:
             context["variant"] = variant
         try:
             prompt = self._template.render(context)
-        except TemplateError as exc:
+        except Exception as exc:
+            # Any failure, not only Jinja's own: `{{ a + b }}` over a string and a number raises a
+            # TypeError, and `{% include %}` without a loader raises one too. Both are this case's
+            # data meeting this template, which is the case's fault and not the suite's.
             raise CaseRenderFailed(f"case {case.id!r}: {type(exc).__name__}: {exc}") from exc
         return RenderedInput(
             case_id=case.id,

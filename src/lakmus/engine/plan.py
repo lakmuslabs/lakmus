@@ -187,5 +187,5 @@ def _effective_config(
         **values,
         concurrency=concurrency,
         bootstrap_resamples=bootstrap_resamples,
-        overrides=tuple(sorted(overrides)),
+        overrides=dict(sorted(overrides.items())),
     )

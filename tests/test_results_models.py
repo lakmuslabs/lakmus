@@ -152,25 +152,18 @@ def test_a_run_must_be_stamped_in_utc(created_at: datetime) -> None:
         _run(created_at=created_at)
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        pytest.param(("temperature", "repeats"), id="unsorted"),
-        pytest.param(("repeats", "repeats"), id="duplicated"),
-    ],
-)
-def test_overrides_are_canonical_because_comparability_compares_them(
-    overrides: tuple[str, ...],
-) -> None:
-    with pytest.raises(ValidationError, match="sorted"):
-        RunConfig(
-            repeats=1,
-            temperature=0.0,
-            seed=0,
-            timeout_s=60,
-            concurrency=8,
-            overrides=overrides,
-        )
+def test_overrides_record_what_they_replaced_a_value_with() -> None:
+    """The names alone would let two runs at different temperatures compare as the same."""
+    config = RunConfig(
+        repeats=1,
+        temperature=0.7,
+        seed=0,
+        timeout_s=60,
+        concurrency=8,
+        overrides={"temperature": 0.7},
+    )
+
+    assert config.overrides == {"temperature": 0.7}
 
 
 def test_a_metric_without_an_interval_has_to_say_why() -> None:

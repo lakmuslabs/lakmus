@@ -25,6 +25,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+import jinja2
 import yaml
 from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
@@ -134,6 +135,7 @@ def inspect(
     path_findings = _check_paths(root, manifest)
     findings += path_findings
     findings += _check_gitattributes(root)
+    findings += _check_template(root, manifest)
 
     case_ids = _check_cases(root, manifest, findings)
 
@@ -343,6 +345,35 @@ def _rejected_paths(path_findings: Sequence[Finding]) -> frozenset[str]:
         for finding in path_findings
         if finding.code in {Code.FILE_MISSING, Code.PATH_ESCAPES_SUITE}
     )
+
+
+def _check_template(root: Path, manifest: Manifest) -> list[Finding]:
+    """Compile the prompt template, for its syntax alone.
+
+    A template that will not compile is a fault in the suite, and finding it here costs nothing
+    while finding it at the first case costs a run. Only syntax is checked: the sandbox the engine
+    renders in is the engine's business, and compiling needs none of it.
+    """
+    if manifest.target.input is None:
+        return []
+    path = root / manifest.target.input
+    if not path.is_file():
+        return []
+    try:
+        # No autoescaping, and no rendering either: a prompt is not HTML, and escaping it
+        # would change what the target reads. This environment only ever compiles.
+        jinja2.Environment(autoescape=False).from_string(  # noqa: S701
+            path.read_text(encoding="utf-8")
+        )
+    except (jinja2.TemplateError, UnicodeDecodeError) as exc:
+        return [
+            Finding(
+                code=Code.TEMPLATE_INVALID,
+                location=manifest.target.input,
+                message=f"will not compile: {type(exc).__name__}: {_one_line(exc)}",
+            )
+        ]
+    return []
 
 
 def _check_gitattributes(root: Path) -> list[Finding]:

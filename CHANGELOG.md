@@ -77,6 +77,10 @@ specification and in each run file. Changes to either are called out here under
   cannot be compared or published.
 - A pair suite renders each case twice, once per side, and the two sides are separate calls: the
   target never sees both, because seeing both is a different task.
+- `config.overrides` records what an override replaced a value with, not only which field was
+  replaced: two runs of one suite at different temperatures are no longer comparable.
+- `latency_ms` and `cost` report nothing rather than zero when every answer came from the cache,
+  so a resumed run does not claim to have been instantaneous or free.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

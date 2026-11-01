@@ -80,7 +80,7 @@ def test_an_override_breaks_comparability_although_the_digest_is_unchanged() -> 
         seed=0,
         timeout_s=60,
         concurrency=8,
-        overrides=("temperature",),
+        overrides={"temperature": 0.7},
     )
 
     assert not comparable(_run(), _run(config=hotter))
@@ -88,10 +88,31 @@ def test_an_override_breaks_comparability_although_the_digest_is_unchanged() -> 
 
 def test_two_runs_with_the_same_override_are_comparable_with_each_other() -> None:
     config = RunConfig(
-        repeats=1, temperature=0.7, seed=0, timeout_s=60, concurrency=8, overrides=("temperature",)
+        repeats=1,
+        temperature=0.7,
+        seed=0,
+        timeout_s=60,
+        concurrency=8,
+        overrides={"temperature": 0.7},
     )
 
     assert comparable(_run(config=config), _run(config=config))
+
+
+def test_two_runs_overridden_to_different_values_are_not_comparable() -> None:
+    """The hole the names alone left: both runs override temperature, to different numbers."""
+
+    def at(temperature: float) -> RunConfig:
+        return RunConfig(
+            repeats=1,
+            temperature=temperature,
+            seed=0,
+            timeout_s=60,
+            concurrency=8,
+            overrides={"temperature": temperature},
+        )
+
+    assert not comparable(_run(config=at(0.2)), _run(config=at(1.5)))
 
 
 @pytest.mark.parametrize("seed", [0, 7])

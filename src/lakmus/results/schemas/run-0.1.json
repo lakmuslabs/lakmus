@@ -107,23 +107,35 @@
     },
     "Latency": {
       "additionalProperties": false,
-      "description": "Latency percentiles, by the same interpolation rule as a confidence interval, rounded to\nthe nearest millisecond. Sub-millisecond precision would be noise from a network call.",
+      "description": "Latency percentiles, by the same interpolation rule as a confidence interval, rounded to\nthe nearest millisecond. Sub-millisecond precision would be noise from a network call.\n\nBoth are `None` when the run measured nothing — every answer came from the cache. Reporting\nzero would say the run was instantaneous, which is a number a reader would quote.",
       "properties": {
         "p50": {
-          "minimum": 0,
-          "title": "P50",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P50"
         },
         "p95": {
-          "minimum": 0,
-          "title": "P95",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P95"
         }
       },
-      "required": [
-        "p50",
-        "p95"
-      ],
       "title": "Latency",
       "type": "object"
     },
@@ -257,12 +269,25 @@
           "type": "integer"
         },
         "overrides": {
-          "default": [],
-          "items": {
-            "type": "string"
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           },
+          "default": {},
           "title": "Overrides",
-          "type": "array"
+          "type": "object"
         },
         "repeats": {
           "exclusiveMinimum": 0,

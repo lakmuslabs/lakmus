@@ -268,15 +268,12 @@ class RunConfig(_Strict):
     bootstrap_resamples: Annotated[int, Field(gt=0)] = 1000
     """Recorded because an interval is only recomputable from the seed when the resample count is
     known too."""
-    overrides: tuple[str, ...] = ()
-    """Manifest fields this invocation replaced. Compared field by field when two runs are checked
-    for comparability, so the order is canonical."""
+    overrides: dict[str, float | int | str | bool] = {}
+    """Manifest fields this invocation replaced, **and what it replaced them with**.
 
-    @model_validator(mode="after")
-    def _overrides_are_canonical(self) -> Self:
-        if list(self.overrides) != sorted(set(self.overrides)):
-            raise ValueError("overrides must be sorted and free of duplicates")
-        return self
+    The names alone are not enough: two runs overridden to different temperatures would have
+    satisfied `comparable()`, which is the exact case this field exists to catch.
+    """
 
 
 class ThresholdApplied(_Strict):
@@ -362,10 +359,14 @@ class Cost(_Strict):
 
 class Latency(_Strict):
     """Latency percentiles, by the same interpolation rule as a confidence interval, rounded to
-    the nearest millisecond. Sub-millisecond precision would be noise from a network call."""
+    the nearest millisecond. Sub-millisecond precision would be noise from a network call.
 
-    p50: Annotated[int, Field(ge=0)]
-    p95: Annotated[int, Field(ge=0)]
+    Both are `None` when the run measured nothing — every answer came from the cache. Reporting
+    zero would say the run was instantaneous, which is a number a reader would quote.
+    """
+
+    p50: Annotated[int, Field(ge=0)] | None = None
+    p95: Annotated[int, Field(ge=0)] | None = None
 
 
 class RunResult(_Strict):

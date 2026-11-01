@@ -4,6 +4,7 @@ Every reaction is either an answer or an exception, consumed in order. That is w
 say "the second attempt succeeds" or "this one never does" without a provider, a clock or a key.
 """
 
+import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, ClassVar
 
@@ -64,6 +65,10 @@ class FakeTarget:
 
     async def invoke(self, case: RenderedCase) -> TargetOutput:
         self.calls.append(case)
+        # Every real adapter awaits I/O here, and a fake that does not runs the engine in a
+        # regime no adapter produces: a loop that only checked its stop conditions before its
+        # first await looked correct against a fake that never had one.
+        await asyncio.sleep(0)
         reaction = self._next(case)
         if isinstance(reaction, BaseException):
             raise reaction

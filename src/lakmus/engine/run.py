@@ -39,7 +39,7 @@ from lakmus.results.models import (
 )
 from lakmus.results.statistics import percentile
 from lakmus.scorers import Case, PairOutputs, Score
-from lakmus.targets.base import Target, TargetError, TargetOutput
+from lakmus.targets.base import RenderedCase, Target, TargetError, TargetOutput
 from lakmus.targets.pricing import ModelPrice
 
 DEFAULT_EARLY_ABORT = 10
@@ -90,7 +90,13 @@ class EngineResult:
 
 @dataclass(slots=True)
 class _Progress:
-    """Shared state: how many units finished, and whether to stop starting new ones."""
+    """Shared state: how many units finished, and whether to stop starting new ones.
+
+    A unit is one case and one repeat, so with three repeats the ten-unit threshold is reached
+    after three and a third cases. The intent — catch a misconfigured run before it is paid for —
+    is served either way, and counting whole cases would mean waiting for every repeat of each
+    before deciding.
+    """
 
     early_abort: int
     completed: int = 0
@@ -137,38 +143,74 @@ async def execute(
         progress.stop = stop
 
     started_at = clock()
+    # Drawn before anything else touches `entropy`: a run id that depended on how many retries
+    # happened would not be reproducible from a seed, which ADR 0006 says it is.
+    run_id = ulid.generate(lambda: started_at, entropy)
     target_digest = cache_digest(target.fingerprint())
-    semaphore = asyncio.Semaphore(plan.config.concurrency)
-
     deadline = None if time_limit_s is None else started_at.timestamp() + time_limit_s
 
-    async def one(case: Case, repeat: int) -> CaseRecord | None:
+    units = [
+        (position, case, repeat)
+        for position, case in enumerate(plan.cases)
+        for repeat in range(plan.config.repeats)
+    ]
+    taken = 0
+    done: list[tuple[int, int, CaseRecord]] = []
+
+    def should_stop() -> bool:
         if progress.interrupted:
-            return None
+            return True
         if deadline is not None and clock().timestamp() >= deadline:
-            # Out of time: stop scheduling and keep what is already answered. There is no default
+            # Out of time: stop taking new work and keep what is answered. There is no default
             # limit, because a large suite legitimately runs for hours.
             progress.stop.set()
-            return None
-        record = await _one_unit(
-            plan,
-            case,
-            repeat,
-            target=target,
-            store=store,
-            retries=retries,
-            sleep=sleep,
-            entropy=entropy,
-            semaphore=semaphore,
-            target_digest=target_digest,
-        )
-        progress.finished(scored=record.scored)
-        return record
+            return True
+        return False
 
-    gathered = await asyncio.gather(
-        *(one(case, repeat) for case in plan.cases for repeat in range(plan.config.repeats))
-    )
-    records = tuple(record for record in gathered if record is not None)
+    async def worker() -> None:
+        """Take units until there are none left, or until something says to stop.
+
+        The check is here, before each unit, rather than once per coroutine. Every unit suspends,
+        so a design that created one coroutine per unit and checked at its start would pass the
+        check before any unit had finished and never look again — which is what the first version
+        of this engine did, and it made the abort, the time limit and the interruption do nothing
+        against any target that awaits.
+        """
+        nonlocal taken
+        while True:
+            if should_stop() or taken >= len(units):
+                return
+            position, case, repeat = units[taken]
+            taken += 1
+            record = await _one_unit(
+                plan,
+                case,
+                repeat,
+                target=target,
+                store=store,
+                retries=retries,
+                sleep=sleep,
+                entropy=entropy,
+                target_digest=target_digest,
+                stopping=should_stop,
+            )
+            done.append((position, repeat, record))
+            progress.finished(scored=record.scored)
+
+    workers = max(1, min(plan.config.concurrency, len(units)))
+    try:
+        async with asyncio.TaskGroup() as group:
+            for _ in range(workers):
+                group.create_task(worker())
+    except BaseExceptionGroup as grouped:
+        # A TaskGroup cancels its siblings, which is the point: a configuration fault must stop
+        # the run rather than leave the other workers spending. The original exception is what
+        # the CLI needs in order to choose an exit code, so it is unwrapped here.
+        raise _first_leaf(grouped) from None
+
+    # Completion order depends on timing; the result must not. Ordered by the case's position in
+    # the suite, then by repeat.
+    records = tuple(record for _, _, record in sorted(done, key=lambda item: (item[0], item[1])))
 
     return EngineResult(
         aborted=progress.aborted,
@@ -177,8 +219,7 @@ async def execute(
             records,
             target=target,
             created_at=started_at,
-            clock=clock,
-            entropy=entropy,
+            run_id=run_id,
             tool_version=tool_version,
             interrupted=progress.interrupted,
         ),
@@ -196,8 +237,8 @@ async def _one_unit(
     retries: RetryPolicy,
     sleep: Sleep,
     entropy: Random,
-    semaphore: asyncio.Semaphore,
     target_digest: str,
+    stopping: Callable[[], bool],
 ) -> CaseRecord:
     try:
         rendered = plan.renderer.pair(case) if plan.arity == "pair" else plan.renderer.single(case)
@@ -223,9 +264,9 @@ async def _one_unit(
             retries=retries,
             sleep=sleep,
             entropy=entropy,
-            semaphore=semaphore,
             target_digest=target_digest,
             timeout_s=plan.config.timeout_s,
+            stopping=stopping,
         )
         for each in rendered
     ]
@@ -246,12 +287,12 @@ async def _answer(
     retries: RetryPolicy,
     sleep: Sleep,
     entropy: Random,
-    semaphore: asyncio.Semaphore,
     target_digest: str,
     timeout_s: int,
+    stopping: Callable[[], bool],
 ) -> AnswerRecord:
     key = cache_key(target_digest=target_digest, input_sha256=rendered.sha256, repeat=repeat)
-    hit = store.get(key)
+    hit = await asyncio.to_thread(store.get, key)
     if hit is not None:
         return AnswerRecord(
             case_id=rendered.case_id,
@@ -269,10 +310,10 @@ async def _answer(
         retries=retries,
         sleep=sleep,
         entropy=entropy,
-        semaphore=semaphore,
         timeout_s=timeout_s,
+        stopping=stopping,
     )
-    store.put(key, output)
+    await asyncio.to_thread(store.put, key, output)
     return AnswerRecord(
         case_id=rendered.case_id,
         repeat=repeat,
@@ -291,8 +332,8 @@ async def _call_with_retries(
     retries: RetryPolicy,
     sleep: Sleep,
     entropy: Random,
-    semaphore: asyncio.Semaphore,
     timeout_s: int,
+    stopping: Callable[[], bool],
 ) -> tuple[TargetOutput, int]:
     """Call the target, retrying what the adapter said was worth retrying.
 
@@ -302,17 +343,19 @@ async def _call_with_retries(
     case = _rendered_case(rendered)
     last: RetryableTargetError | None = None
 
+    spent = 0
     for attempt in range(1, retries.attempts + 1):
-        async with semaphore:
-            try:
-                async with asyncio.timeout(timeout_s):
-                    return await target.invoke(case), attempt
-            except RetryableTargetError as exc:
-                last = exc
-            except TimeoutError:
-                last = _TimedOut(f"no answer within {timeout_s}s")
+        spent = attempt
+        try:
+            async with asyncio.timeout(timeout_s):
+                return await target.invoke(case), attempt
+        except RetryableTargetError as exc:
+            last = exc
+        except TimeoutError:
+            last = _TimedOut(f"no answer within {timeout_s}s")
 
-        if attempt == retries.attempts:
+        if attempt == retries.attempts or stopping():
+            # Nothing is gained by paying for another attempt once the run is stopping.
             break
         wait = retries.wait_for(
             attempt,
@@ -327,10 +370,10 @@ async def _call_with_retries(
             error=TargetError(
                 kind="timeout" if isinstance(last, _TimedOut) else _kind_of(last),
                 message=str(last) if last else "the target did not answer",
-                attempts=retries.attempts,
+                attempts=spent,
             ),
         ),
-        retries.attempts,
+        spent,
     )
 
 
@@ -338,13 +381,20 @@ class _TimedOut(RetryableTargetError):
     """The engine's own per-attempt timeout, as distinct from the adapter's."""
 
 
+def _first_leaf(grouped: BaseExceptionGroup[BaseException]) -> BaseException:
+    """The first exception inside a possibly nested group."""
+    for contained in grouped.exceptions:
+        if isinstance(contained, BaseExceptionGroup):
+            return _first_leaf(contained)
+        return contained
+    return grouped
+
+
 def _kind_of(error: RetryableTargetError | None) -> Any:
     return "rate_limited" if isinstance(error, TargetRateLimited) else "unavailable"
 
 
-def _rendered_case(rendered: RenderedInput) -> Any:
-    from lakmus.targets.base import RenderedCase
-
+def _rendered_case(rendered: RenderedInput) -> RenderedCase:
     return RenderedCase(
         case_id=rendered.case_id,
         prompt=rendered.prompt,
@@ -381,6 +431,10 @@ def _observations(plan: RunPlan, records: Sequence[CaseRecord]) -> list[MetricOb
     """
     observations: list[MetricObservations] = []
     for metric in plan.metrics:
+        # A judge-scored metric needs two repeats of a case to say anything about its own
+        # variance, so a case that lost one of them is an error rather than half a measurement.
+        # Passing it on raised out of aggregation and threw away the whole paid run.
+        minimum = 1 if metric.spec.deterministic else 2
         values: dict[str, list[float]] = {}
         groups: dict[str, Mapping[str, str]] = {}
         for record in records:
@@ -399,14 +453,14 @@ def _observations(plan: RunPlan, records: Sequence[CaseRecord]) -> list[MetricOb
         cases = tuple(
             CaseObservation(case_id=case_id, scores=tuple(scored), groups=groups.get(case_id, {}))
             for case_id, scored in sorted(values.items())
-            if scored
+            if len(scored) >= minimum
         )
         observations.append(
             MetricObservations(
                 metric_id=metric.id,
                 deterministic=metric.spec.deterministic,
                 cases=cases,
-                n_errors=sum(1 for scored in values.values() if not scored),
+                n_errors=sum(1 for scored in values.values() if len(scored) < minimum),
                 threshold=metric.threshold,
                 group_by=metric.group_by,
             )
@@ -420,8 +474,7 @@ def _build_run(
     *,
     target: Target,
     created_at: datetime,
-    clock: Clock,
-    entropy: Random,
+    run_id: str,
     tool_version: str,
     interrupted: bool,
 ) -> RunResult:
@@ -435,7 +488,7 @@ def _build_run(
 
     return RunResult(
         lakmus_format="0.1",
-        run_id=ulid.generate(lambda: created_at, entropy),
+        run_id=run_id,
         status="interrupted" if interrupted else "complete",
         created_at=created_at,
         tool=ToolInfo(name="lakmus", version=tool_version, python=_python_version()),
@@ -460,7 +513,9 @@ def _latency(answers: Sequence[AnswerRecord]) -> Latency:
     """Percentiles by the same interpolation rule as a confidence interval, to the millisecond."""
     measured = sorted(float(answer.output.latency_ms) for answer in answers if not answer.cached)
     if not measured:
-        return Latency(p50=0, p95=0)
+        # Every answer came from the cache, so this run measured nothing. Zero would read as
+        # instantaneous, which is a number a reader would quote.
+        return Latency()
     return Latency(p50=round(percentile(measured, 50.0)), p95=round(percentile(measured, 95.0)))
 
 
@@ -470,9 +525,12 @@ def _cost(answers: Sequence[AnswerRecord]) -> Cost:
     A call with no price contributes nothing rather than zero, and a run with no priced call has
     no figure at all — which is different from costing nothing.
     """
-    priced = [answer.output for answer in answers if answer.output.cost_usd is not None]
-    tokens_in = sum(a.output.usage.tokens_in for a in answers if a.output.usage is not None)
-    tokens_out = sum(a.output.usage.tokens_out for a in answers if a.output.usage is not None)
+    # Only what this run paid for. A cached answer cost money once, in another run, and counting
+    # it here would report a spend that did not happen.
+    fresh = [answer for answer in answers if not answer.cached]
+    priced = [answer.output for answer in fresh if answer.output.cost_usd is not None]
+    tokens_in = sum(a.output.usage.tokens_in for a in fresh if a.output.usage is not None)
+    tokens_out = sum(a.output.usage.tokens_out for a in fresh if a.output.usage is not None)
     if not priced:
         return Cost(tokens_in=tokens_in, tokens_out=tokens_out)
 

@@ -27,6 +27,8 @@ from lakmus.errors import (
     TargetUnavailable,
 )
 from lakmus.results import comparable
+from lakmus.results.models import TargetFingerprint, cache_digest
+from lakmus.results.statistics import sample_indices
 from lakmus.scorers import BUILTIN_SCORERS, ScorerSpec
 from lakmus.suite.loader import MANIFEST_FILENAME, load, validate
 from lakmus.targets.base import TargetError, TargetKind
@@ -449,7 +451,7 @@ def test_an_override_is_recorded_so_that_comparability_can_see_it(valid_suite: P
     run_plan = _planned(root, overrides={"temperature": 0.7})
 
     assert run_plan.config.temperature == 0.7
-    assert run_plan.config.overrides == ("temperature",)
+    assert run_plan.config.overrides == {"temperature": 0.7}
 
 
 async def test_a_scorer_that_cannot_run_ends_the_run(valid_suite: Path) -> None:
@@ -491,14 +493,15 @@ async def test_a_case_contributes_the_repeats_that_scored(valid_suite: Path) -> 
 async def test_parity_a_whole_run_time_limit_stops_scheduling(valid_suite: Path) -> None:
     """The second half of the timeout requirement: a limit on the run, not only on an attempt.
 
-    There is no default, because a large suite legitimately runs for hours and a default that
-    killed it would be worse than none.
+    The first version of this test asserted `len(result.cases) < 20` while the real value was 0,
+    so it would have passed against an engine that ran nothing at all. It now pins both ends:
+    some work happened, and not all of it did.
     """
     root = _single_suite(
         valid_suite,
         cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
     )
-    ticks = iter([MOMENT] + [MOMENT.replace(second=30)] * 100)
+    reads = iter(range(1000))
     target = FakeTarget()
     run_plan = _planned(root, concurrency=1)
     await target.setup(run_plan.target_config(identity="scripted", model=None))
@@ -506,14 +509,16 @@ async def test_parity_a_whole_run_time_limit_stops_scheduling(valid_suite: Path)
     result = await execute(
         run_plan,
         target=target,
-        clock=lambda: next(ticks),
+        # One virtual second per read, so the deadline arrives part-way through the suite.
+        clock=lambda: MOMENT.replace(second=next(reads) % 60),
         entropy=Random(1),
         sleep=_never_sleeps,
-        time_limit_s=10.0,
+        time_limit_s=4.0,
     )
 
     assert result.run.status == "interrupted"
-    assert len(result.cases) < 20
+    assert 0 < len(result.cases) < 20
+    assert len(target.calls) == len(result.cases)
 
 
 async def test_without_a_limit_a_long_run_is_not_cut_short(valid_suite: Path) -> None:
@@ -526,3 +531,201 @@ async def test_without_a_limit_a_long_run_is_not_cut_short(valid_suite: Path) ->
 
     assert result.run.status == "complete"
     assert len(result.cases) == 20
+
+
+# --- what only a target that suspends can prove -----------------------------------------------
+
+
+async def test_the_early_abort_actually_saves_the_calls(valid_suite: Path) -> None:
+    """The claim is that a misconfigured run costs ten cases rather than five thousand.
+
+    With a fake that never awaited, every coroutine passed its only check before any unit had
+    finished, so all forty cases were called and the abort saved nothing. The run was still
+    marked interrupted, which is how it looked correct.
+    """
+    root = _single_suite(
+        valid_suite,
+        cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(40)],
+    )
+    target = FakeTarget(answer=lambda case: TargetError(kind="bad_request", message="nope"))
+
+    result = await _run(root, target, plan={"concurrency": 1}, early_abort=10)
+
+    assert result.aborted is True
+    assert len(target.calls) <= 12
+    assert len(result.cases) <= 12
+
+
+async def test_an_interruption_stops_scheduling_rather_than_only_labelling(
+    valid_suite: Path,
+) -> None:
+    """What M6's Ctrl-C handler depends on: setting the event has to stop the spending."""
+    root = _single_suite(
+        valid_suite,
+        cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
+    )
+    stop = asyncio.Event()
+    calls_before_stop = 3
+
+    class Stops(FakeTarget):
+        async def invoke(self, case: Any) -> Any:
+            if len(self.calls) >= calls_before_stop:
+                stop.set()
+            return await FakeTarget.invoke(self, case)
+
+    target = Stops()
+    result = await _run(root, target, plan={"concurrency": 1}, stop=stop)
+
+    assert result.run.status == "interrupted"
+    assert len(target.calls) <= calls_before_stop + 2
+    assert 0 < len(result.cases) < 20
+
+
+async def test_a_configuration_fault_stops_the_other_workers_too(valid_suite: Path) -> None:
+    """A config error used to end the caller while the remaining workers kept spending."""
+    root = _single_suite(
+        valid_suite,
+        cases=[{"id": f"c-{index}", "question": "q ?", "expected": "oui"} for index in range(20)],
+    )
+
+    class Misconfigured(FakeTarget):
+        async def invoke(self, case: Any) -> Any:
+            self.calls.append(case)
+            await asyncio.sleep(0)
+            raise TargetConfigError("the model does not exist")
+
+    target = Misconfigured()
+
+    with pytest.raises(TargetConfigError, match="does not exist"):
+        await _run(root, target, plan={"concurrency": 4})
+
+    assert len(target.calls) <= 8
+
+
+async def test_a_judge_scored_case_that_loses_a_repeat_is_an_error_not_a_crash(
+    valid_suite: Path,
+) -> None:
+    """One rate-limit exhaustion used to throw away a whole paid judge-scored run.
+
+    Aggregation refuses a non-deterministic metric whose case has fewer than two repeats, so a
+    partial case reached it and raised, which is the opposite of "a failed case is recorded, not
+    fatal".
+    """
+    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    manifest_path = root / MANIFEST_FILENAME
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["run"]["repeats"] = 2
+    manifest["metrics"] = [{"id": "judged", "scorer": "scorers/judge.py:judged"}]
+    manifest["thresholds"] = {}
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    (root / "scorers" / "judge.py").write_text(
+        "from lakmus.scorers import Case, Score, scorer, text_of\n"
+        "from lakmus.targets.base import TargetOutput\n\n\n"
+        '@scorer(name="judged", higher_is_better=True, deterministic=False)\n'
+        "def judged(case: Case, output: TargetOutput) -> Score:\n"
+        "    answer = text_of(output)\n"
+        "    return Score.of(1.0) if answer else Score.unscoreable('no answer')\n",
+        encoding="utf-8",
+    )
+    target = FakeTarget(script=["oui", TargetError(kind="bad_request", message="nope")])
+
+    suite = load(root, run_suite_code=True, scorers=BUILTIN_SCORERS)
+    specs = {"judged": _suite_spec(root)}
+    run_plan = plan(suite, specs=specs)
+    await target.setup(run_plan.target_config(identity="scripted", model=None))
+    result = await execute(
+        run_plan, target=target, clock=lambda: MOMENT, entropy=Random(1), sleep=_never_sleeps
+    )
+
+    summary = result.run.summary["judged"]
+    assert result.run.status == "complete"
+    assert (summary.n_cases, summary.n_errors) == (0, 1)
+    assert summary.passed is None
+
+
+def _suite_spec(root: Path) -> Any:
+    """Import the fixture's judge scorer the way the loader does."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("judge_under_test", root / "scorers" / "judge.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    from lakmus.scorers import spec_of
+
+    resolved = spec_of(module.judged)
+    assert resolved is not None
+    return resolved
+
+
+async def test_an_unwritable_cache_does_not_end_a_run_already_paid_for(
+    valid_suite: Path, tmp_path: Path
+) -> None:
+    """The rule `get` states and `put` used to break."""
+    root = _single_suite(valid_suite, cases=[{"id": "c-0", "question": "q ?", "expected": "oui"}])
+    read_only = tmp_path / "read-only"
+    read_only.mkdir()
+    read_only.chmod(0o500)
+    try:
+        result = await _run(
+            root, FakeTarget(), cache=FileCache(root=read_only / "cache", tool_version="t")
+        )
+    finally:
+        read_only.chmod(0o700)
+
+    assert result.run.summary["accuracy"].value == 1.0
+
+
+# --- the cache digest, which nothing was testing ----------------------------------------------
+
+
+def test_the_cache_digest_covers_the_generation_parameters() -> None:
+    """ADR 0003 asks for a test that proves a changed temperature misses the cache.
+
+    The first version compared two hand-written digests, so stubbing `cache_digest` to a constant
+    left the whole suite green.
+    """
+    cold = TargetFingerprint.create(
+        adapter="fake", kind="model", identity="fake://local", parameters={"temperature": 0.0}
+    )
+    warm = TargetFingerprint.create(
+        adapter="fake", kind="model", identity="fake://local", parameters={"temperature": 0.7}
+    )
+
+    assert cache_digest(cold) != cache_digest(warm)
+
+
+def test_the_cache_digest_ignores_the_version_the_provider_served() -> None:
+    """Otherwise every entry written before the first response would be unreusable."""
+    unknown = TargetFingerprint.create(adapter="fake", kind="model", identity="fake://local")
+    known = TargetFingerprint.create(
+        adapter="fake", kind="model", identity="fake://local", declared_version="fake-1"
+    )
+
+    assert cache_digest(unknown) == cache_digest(known)
+    assert unknown.sha256 != known.sha256
+
+
+async def test_a_run_at_another_temperature_pays_again(valid_suite: Path, tmp_path: Path) -> None:
+    """End to end, through the key: the same suite at a different temperature is a cache miss."""
+    root = _single_suite(valid_suite)
+    cache = FileCache(root=tmp_path / "cache", tool_version="test")
+
+    cold = FakeTarget()
+    await _run(root, cold, cache=cache)
+    warm = FakeTarget()
+    await _run(root, warm, cache=cache, plan={"overrides": {"temperature": 0.7}})
+
+    assert len(cold.calls) == 3
+    assert len(warm.calls) == 3
+
+
+def test_a_sample_is_the_same_sample_on_another_machine() -> None:
+    first = sample_indices(100, 7, seed=42)
+    again = sample_indices(100, 7, seed=42)
+    other = sample_indices(100, 7, seed=43)
+
+    assert first == again
+    assert first != other
+    assert len(set(first)) == 7
+    assert sample_indices(5, 9, seed=1) == (0, 1, 2, 3, 4)

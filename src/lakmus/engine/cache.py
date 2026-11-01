@@ -7,10 +7,13 @@ resumed run re-pays for the cases that failed, which is the right way round.
 
 import hashlib
 import json
+import os
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from uuid import uuid4
 
 from lakmus.results.models import FORMAT_VERSION
 from lakmus.targets.base import TargetOutput
@@ -79,10 +82,15 @@ class FileCache:
             return None
 
     def put(self, key: str, output: TargetOutput) -> None:
+        """Store an answer, or give up quietly.
+
+        Never raises. A read-only cache directory, a full disk or a race with another run must not
+        end a run whose calls have already been paid for — which is the rule `get` states and this
+        method used to break.
+        """
         if output.error is not None:
             return
         path = self.path_for(key)
-        path.parent.mkdir(parents=True, exist_ok=True)
         document = {
             "algorithm": CACHE_ALGORITHM,
             "tool": self.tool_version,
@@ -90,7 +98,13 @@ class FileCache:
             "output": output.model_dump(mode="json"),
         }
         # Written beside and moved into place, so that an interrupted write leaves no half-entry
-        # for the next run to read.
-        temporary = path.with_suffix(".json.partial")
-        temporary.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
-        temporary.replace(path)
+        # for the next run to read. The suffix is unique per writer: two runs of the same suite
+        # against the same target are the case this cache exists for, so they will collide.
+        temporary = path.with_name(f"{path.name}.{os.getpid()}.{uuid4().hex}.partial")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)
