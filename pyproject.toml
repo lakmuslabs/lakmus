@@ -62,8 +62,9 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-# Assertions are the point of a test; subprocess and temp paths are fixtures there.
-"tests/**" = ["S101", "S603", "S607", "S108"]
+# Assertions are the point of a test; subprocess and temp paths are fixtures there, and a seeded
+# Random is how a test pins something this project requires to be reproducible.
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
 
 [tool.mypy]
 strict = true

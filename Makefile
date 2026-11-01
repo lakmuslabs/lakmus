@@ -23,3 +23,4 @@ live:
 
 schema:
 	uv run python -m lakmus.suite.schema
+	uv run python -m lakmus.results.schema

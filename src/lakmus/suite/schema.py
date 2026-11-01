@@ -1,47 +1,37 @@
 """The published JSON Schema for a manifest.
 
-The schema is generated from `Manifest`, written to disk, and committed. A test regenerates it and
-fails if the committed file differs: the hub and any other implementation validate against the
-published copy, so the copy and the models must not drift.
+Generated from `Manifest`, written to disk and committed; a test fails when the committed copy
+drifts. Regenerate with `make schema`.
 
-Regenerate with `make schema`.
-
-The generated files live in `schemas/` rather than `schema/`: a data directory sharing a
-name with this module resolves only by the rule that a file module beats a namespace
-package, which is a trap for packaging tools.
+The generated files live in `schemas/` rather than `schema/`: a data directory sharing a name with
+this module resolves only by the rule that a file module beats a namespace package, which is a
+trap for packaging tools.
 """
 
-import json
 from pathlib import Path
 from typing import Any
 
+from lakmus import schemas
 from lakmus.suite.models import FORMAT_VERSION, Manifest
 
-SCHEMA_PATH = Path(__file__).parent / "schemas" / f"suite-{FORMAT_VERSION}.json"
-SCHEMA_ID = f"https://lakmuslabs.github.io/lakmus/schemas/{FORMAT_VERSION}/suite.json"
-METASCHEMA = "https://json-schema.org/draft/2020-12/schema"
+NAME = "suite"
+TITLE = f"Lakmus suite manifest {FORMAT_VERSION}"
+SCHEMA_PATH = Path(__file__).parent / "schemas" / f"{NAME}-{FORMAT_VERSION}.json"
+SCHEMA_ID = schemas.schema_id(FORMAT_VERSION, NAME)
 
 
 def build() -> dict[str, Any]:
-    """The schema as a dictionary, with the identity a published copy needs."""
-    generated = Manifest.model_json_schema(by_alias=True, mode="validation")
-    return {
-        "$schema": METASCHEMA,
-        "$id": SCHEMA_ID,
-        "title": f"Lakmus suite manifest {FORMAT_VERSION}",
-        **generated,
-    }
+    return schemas.build(Manifest, format_version=FORMAT_VERSION, name=NAME, title=TITLE)
 
 
 def render() -> str:
-    """The exact bytes of the committed file."""
-    return json.dumps(build(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    return schemas.render(Manifest, format_version=FORMAT_VERSION, name=NAME, title=TITLE)
 
 
 def write() -> Path:
-    SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SCHEMA_PATH.write_text(render(), encoding="utf-8")
-    return SCHEMA_PATH
+    return schemas.write(
+        Manifest, SCHEMA_PATH, format_version=FORMAT_VERSION, name=NAME, title=TITLE
+    )
 
 
 if __name__ == "__main__":

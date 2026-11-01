@@ -22,6 +22,16 @@ specification and in each run file. Changes to either are called out here under
   in one pass, each with a stable `LKM-` code and the fix. Suite scorers are imported only
   with `--yes`, and never when there is no terminal to ask at.
 - `lakmus init`: scaffolds a suite that validates.
+- The `run.json` model for format 0.1, with the JSON Schema generated from it at
+  `lakmus/results/schemas/run-0.1.json`. A fingerprint cannot claim a digest it does not
+  have, and cannot carry a credential.
+- Aggregation: per-metric and per-group summaries, threshold verdicts, and a `conclusive`
+  flag that is false when the confidence interval straddles the threshold.
+- 95% confidence intervals by a cluster bootstrap over cases, computed with a generator any
+  implementation can reproduce, so an interval in a run file can be recomputed by whoever
+  reads it.
+- `comparable()`: two runs are comparable when the format version, `inputs_sha256` and the
+  set of configuration overrides all match. The target is deliberately not part of it.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schema/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

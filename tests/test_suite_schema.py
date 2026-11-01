@@ -7,6 +7,7 @@ than against these models. A copy that is out of date is a contract that is out 
 import json
 from typing import Any
 
+from lakmus import schemas
 from lakmus.suite import schema
 from lakmus.suite.models import FORMAT_VERSION
 
@@ -21,7 +22,7 @@ def test_the_schema_carries_the_identity_a_published_copy_needs() -> None:
     built: dict[str, Any] = schema.build()
 
     assert built["$id"].endswith(f"/{FORMAT_VERSION}/suite.json")
-    assert built["$schema"] == schema.METASCHEMA
+    assert built["$schema"] == schemas.METASCHEMA
 
 
 def test_the_schema_describes_the_file_an_author_writes() -> None:

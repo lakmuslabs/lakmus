@@ -1,0 +1,512 @@
+{
+  "$defs": {
+    "Cost": {
+      "additionalProperties": false,
+      "properties": {
+        "tokens_in": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Tokens In",
+          "type": "integer"
+        },
+        "tokens_out": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Tokens Out",
+          "type": "integer"
+        },
+        "usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usd"
+        }
+      },
+      "title": "Cost",
+      "type": "object"
+    },
+    "GroupSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "ci95": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci95"
+        },
+        "n_cases": {
+          "minimum": 0,
+          "title": "N Cases",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n_cases"
+      ],
+      "title": "GroupSummary",
+      "type": "object"
+    },
+    "Latency": {
+      "additionalProperties": false,
+      "properties": {
+        "p50": {
+          "minimum": 0,
+          "title": "P50",
+          "type": "integer"
+        },
+        "p95": {
+          "minimum": 0,
+          "title": "P95",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "p50",
+        "p95"
+      ],
+      "title": "Latency",
+      "type": "object"
+    },
+    "MetricSummary": {
+      "additionalProperties": false,
+      "description": "One metric over a whole run.\n\n`value` is `None` when no case produced a score. A metric over zero successful cases has no\nvalue, and recording 0.0 would be a measurement nobody made.",
+      "properties": {
+        "ci95": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci95"
+        },
+        "ci_unavailable_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Unavailable Reason"
+        },
+        "conclusive": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conclusive"
+        },
+        "deterministic": {
+          "title": "Deterministic",
+          "type": "boolean"
+        },
+        "n_cases": {
+          "minimum": 0,
+          "title": "N Cases",
+          "type": "integer"
+        },
+        "n_errors": {
+          "minimum": 0,
+          "title": "N Errors",
+          "type": "integer"
+        },
+        "n_observations": {
+          "minimum": 0,
+          "title": "N Observations",
+          "type": "integer"
+        },
+        "passed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Passed"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThresholdApplied"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n_cases",
+        "n_observations",
+        "n_errors",
+        "deterministic"
+      ],
+      "title": "MetricSummary",
+      "type": "object"
+    },
+    "RunConfig": {
+      "additionalProperties": false,
+      "description": "The values a run actually used, and which of them the invocation replaced.",
+      "properties": {
+        "concurrency": {
+          "exclusiveMinimum": 0,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "overrides": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Overrides",
+          "type": "array"
+        },
+        "repeats": {
+          "exclusiveMinimum": 0,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "temperature": {
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "timeout_s": {
+          "exclusiveMinimum": 0,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repeats",
+        "temperature",
+        "seed",
+        "timeout_s",
+        "concurrency"
+      ],
+      "title": "RunConfig",
+      "type": "object"
+    },
+    "SuiteRef": {
+      "additionalProperties": false,
+      "description": "Which suite produced this, and the two digests ADR 0005 defined.",
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Inputs Sha256",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "inputs_sha256",
+        "content_sha256"
+      ],
+      "title": "SuiteRef",
+      "type": "object"
+    },
+    "TargetFingerprint": {
+      "additionalProperties": false,
+      "description": "What was measured, in enough detail to say whether two runs measured the same thing.\n\nLives here rather than in `targets` because it is part of this file's format: an adapter\nimports it to report itself, which is the one dependency that direction.",
+      "properties": {
+        "adapter": {
+          "title": "Adapter",
+          "type": "string"
+        },
+        "declared_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Version"
+        },
+        "identity": {
+          "title": "Identity",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "agent",
+            "mcp"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Parameters",
+          "type": "object"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter",
+        "kind",
+        "identity",
+        "sha256"
+      ],
+      "title": "TargetFingerprint",
+      "type": "object"
+    },
+    "ThresholdApplied": {
+      "additionalProperties": false,
+      "description": "The bounds this run applied, which an override may have moved.",
+      "properties": {
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        }
+      },
+      "title": "ThresholdApplied",
+      "type": "object"
+    },
+    "ToolInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "python": {
+          "title": "Python",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "python"
+      ],
+      "title": "ToolInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://lakmuslabs.github.io/lakmus/schemas/0.1/run.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`run.json`.",
+  "properties": {
+    "by_group": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/GroupSummary"
+          },
+          "type": "object"
+        },
+        "type": "object"
+      },
+      "default": {},
+      "title": "By Group",
+      "type": "object"
+    },
+    "cases": {
+      "default": "cases.jsonl.gz",
+      "title": "Cases",
+      "type": "string"
+    },
+    "config": {
+      "$ref": "#/$defs/RunConfig"
+    },
+    "cost": {
+      "$ref": "#/$defs/Cost",
+      "default": {
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "usd": null
+      }
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "lakmus_format": {
+      "const": "0.1",
+      "title": "Lakmus Format",
+      "type": "string"
+    },
+    "latency_ms": {
+      "$ref": "#/$defs/Latency"
+    },
+    "run_id": {
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "signature": {
+      "default": null,
+      "title": "Signature",
+      "type": "null"
+    },
+    "suite": {
+      "$ref": "#/$defs/SuiteRef"
+    },
+    "summary": {
+      "additionalProperties": {
+        "$ref": "#/$defs/MetricSummary"
+      },
+      "title": "Summary",
+      "type": "object"
+    },
+    "target": {
+      "$ref": "#/$defs/TargetFingerprint"
+    },
+    "tool": {
+      "$ref": "#/$defs/ToolInfo"
+    }
+  },
+  "required": [
+    "lakmus_format",
+    "run_id",
+    "created_at",
+    "tool",
+    "suite",
+    "target",
+    "config",
+    "summary",
+    "latency_ms"
+  ],
+  "title": "RunResult",
+  "type": "object"
+}
