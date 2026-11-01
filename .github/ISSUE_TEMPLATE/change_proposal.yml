@@ -1,0 +1,50 @@
+name: Change proposal
+description: Propose a feature, an interface change, or a change to the suite format.
+labels: [proposal]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        A change to a public interface — a CLI flag, a manifest field, a run.json field, the Target
+        protocol — becomes a decision record before it is implemented. This issue is where that
+        decision is discussed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you cannot do today, in terms of the work you are trying to get done.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would change. Include the interface if you have one in mind.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: What it touches
+      multiple: true
+      options:
+        - Suite format
+        - run.json
+        - CLI commands or flags
+        - Target protocol or an adapter
+        - Scorers
+        - Engine internals only
+        - Documentation only
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility
+      description: >
+        What happens to existing suites and existing run files. A change that makes past results
+        incomparable needs to say so.

@@ -1,0 +1,54 @@
+name: Suite proposal
+description: Propose a test suite for a domain you know.
+labels: [suite]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Methodology comes before cases. This form exists so the method can be settled before anyone
+        spends time writing inputs. You do not need to write Python to propose a suite.
+
+  - type: input
+    id: domain
+    attributes:
+      label: Domain and task
+      description: 'For example: French CV screening, decide whether to shortlist a candidate.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: claim
+    attributes:
+      label: What the suite would measure
+      description: >
+        One sentence a result could support. Prefer "the score changes by more than 5% when only the
+        candidate's name changes" over "the model is biased".
+    validations:
+      required: true
+
+  - type: textarea
+    id: ground_truth
+    attributes:
+      label: How a case is judged
+      description: >
+        Where the expected answer comes from — a regulation, a professional standard, a
+        counterfactual pair that needs no ground truth — and who could defend it if the result is
+        contested.
+    validations:
+      required: true
+
+  - type: textarea
+    id: data
+    attributes:
+      label: Data
+      description: >
+        Where the inputs come from, whether they are synthetic, and their licence. Real personal
+        data is not accepted.
+    validations:
+      required: true
+
+  - type: textarea
+    id: shortcuts
+    attributes:
+      label: Known shortcuts
+      description: How a target could pass without doing the task, and how the suite prevents it.
