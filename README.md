@@ -1,35 +1,26 @@
 # Lakmus
 
-Write a test suite for the work you actually do, then run it against any model, agent or MCP
-server.
-
-Public benchmarks measure what can be measured at scale. They say little about whether a system
-holds up on a specific job — screening CVs under French labour law, reading a commercial lease,
-triaging a support queue in your product's vocabulary. Lakmus makes that test a first-class,
-shareable object: a directory in Git that anyone can review, fork and run.
-
-The unit is the test suite, not the model.
+A CLI that runs domain test suites against models, agents and MCP servers. The unit is the suite,
+not the model: a directory in Git, versioned and reviewable, that states what is measured and the
+thresholds that must hold.
 
 > **Status: pre-release.** The suite format is at draft version 0.1 and the engine is in
-> development. The command set below is the v0.1 target; not all of it exists yet. The format may
-> change before 0.1 is tagged.
+> development. The command set below is the v0.1 target; not all of it exists yet.
 
-## What a suite looks like
-
-A suite is a directory. Nothing in it is specific to a provider.
+## A suite
 
 ```text
 rh/equite-tri-cv-fr/
 ├── lakmus.yaml          # what is measured, how, and the thresholds that must hold
 ├── cases/pairs.jsonl    # the inputs, one JSON object per line
 ├── prompts/screener.j2  # how a case becomes a prompt
-├── scorers/pair_gap.py  # optional: scoring this domain needs
+├── scorers/pair_gap.py  # optional, when the domain needs its own scoring
 ├── README.md            # what the suite claims, and what it does not
 └── LICENSE
 ```
 
-The manifest declares the metrics and the thresholds, so a run has a verdict rather than a number
-needing interpretation:
+Nothing in it is specific to a provider. The manifest carries the thresholds, so a run ends with a
+verdict rather than a number to interpret:
 
 ```yaml
 lakmus: "0.1"
@@ -54,8 +45,8 @@ thresholds:
   score_gap: {max: 0.05}
 ```
 
-The specification behind it — every field, the validation rules, the versioning policy — is
-published with release 0.1.
+The specification — every field, the validation rules, the versioning policy — is published with
+release 0.1.
 
 ## Running a suite
 
@@ -74,27 +65,25 @@ usage or an invalid suite, `3` a runtime error — so a suite drops into CI with
 
 ## Reproducibility
 
-Every run writes a `run.json` that carries the tool version, a hash of every file in the suite, a
+Every run writes a `run.json` carrying the tool version, a hash of every file in the suite, a
 fingerprint of the target, the full configuration, and the aggregates with 95% bootstrap confidence
 intervals. Two results are comparable when the suite hash and the format version match, and
-`lakmus replay` re-runs a recorded configuration without guesswork. Temperature is 0 by default and
-the seed is explicit; a scorer that calls a model declares itself as non-deterministic.
+`lakmus replay` re-runs a recorded configuration. Temperature is 0 by default, the seed is
+explicit, and a scorer that calls a model declares itself non-deterministic.
 
-Nothing leaves your machine. The CLI calls targets directly with your keys, read from environment
-variables named in the suite or on the command line, and writes results to a local directory. There
-is no account and no server in the loop. A hub for publishing and comparing results is planned as a
-separate project that consumes `run.json`; publishing will be a deliberate step.
+Runs are local. The CLI calls targets directly with your keys, read from environment variables
+named in the suite or on the command line, and writes results to a directory you choose. No
+account, no server.
 
 ## Contributing
 
-Domain expertise is worth more here than Python. If you know a field well enough to say how a
-system should behave in it, that is the hard part of a good suite — open an issue and we will work
-out the mechanics together.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup and the checks; the conventions shared across the
+organisation are in
+[CONVENTIONS.md](https://github.com/lakmuslabs/.github/blob/main/CONVENTIONS.md). A change to a
+public interface starts as a change proposal issue and is settled before implementation.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before a first pull request, and
-[CONVENTIONS.md](https://github.com/lakmuslabs/.github/blob/main/CONVENTIONS.md) for the
-conventions shared across the organisation. Interfaces are designed before they are implemented:
-anything touching a public interface starts with a decision record.
+Writing a suite needs domain knowledge more than Python. Open an issue describing what you want to
+measure.
 
 ## Licence
 
