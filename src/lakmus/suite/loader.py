@@ -12,6 +12,7 @@ its own rule.
 """
 
 import difflib
+import hashlib
 import importlib.util
 import json
 import sys
@@ -427,7 +428,10 @@ def _check_scorers(root: Path, manifest: Manifest, *, run_suite_code: bool) -> l
 
 
 def _import_module(path: Path, findings: list[Finding]) -> object | None:
-    name = f"lakmus_suite_scorer_{path.stem}_{abs(hash(str(path)))}"
+    # A digest, not hash(): PYTHONHASHSEED makes hash() vary between processes, and this
+    # project injects randomness rather than inheriting it.
+    fingerprint = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:12]
+    name = f"lakmus_suite_scorer_{path.stem}_{fingerprint}"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         findings.append(
