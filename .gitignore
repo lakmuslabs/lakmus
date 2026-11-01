@@ -26,6 +26,11 @@ docs/
 .env.*
 !.env.example
 
+# Per-contributor Claude Code files; the committed CLAUDE.md and
+# .claude/settings.json are the shared ones.
+CLAUDE.local.md
+.claude/settings.local.json
+
 # Editors and OS
 .DS_Store
 .idea/
