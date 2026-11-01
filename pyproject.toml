@@ -1,6 +1,6 @@
 [project]
 name = "lakmus"
-version = "0.0.1"
+version = "0.1.0"
 description = "Share and run domain test suites against AI models, agents and MCP servers"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -52,6 +52,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lakmus"]
+
+[tool.hatch.build.targets.sdist]
+# The suites are CC-BY-4.0 and this distribution declares Apache-2.0. They are maintained in
+# the repository, not installed by the package and not needed to build it, so shipping 1.3 MB
+# of them inside an artefact whose metadata names one licence would make that metadata wrong.
+exclude = ["/suites"]
 
 [tool.ruff]
 line-length = 100

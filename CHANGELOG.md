@@ -10,10 +10,15 @@ specification and in each run file. Changes to either are called out here under
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
+First release. The CLI runs a suite against a target and writes a result that someone who was
+not there can read.
+
 ### Added
 
 - Suite format specification, draft version 0.1.
-- Package skeleton and `lakmus --version`. No suite can be run yet.
+- Package skeleton and `lakmus --version`.
 - Module layout under `src/lakmus/`, with the dependency rule between layers enforced by a
   test rather than stated in documentation.
 - Domain exceptions in `lakmus.errors`, each carrying the process exit code the CLI uses for
@@ -127,4 +132,11 @@ specification and in each run file. Changes to either are called out here under
 - Repository baseline: licence, contribution, conduct and security policies, issue and pull request
   templates, dependency updates, and continuous integration on Python 3.11 to 3.13.
 
-[Unreleased]: https://github.com/lakmuslabs/lakmus/commits/main
+### Changed
+
+- The source distribution leaves `suites/` out. The suites are CC-BY-4.0 and this package is
+  Apache-2.0; they are not installed, not needed to build, and shipping them inside an artefact
+  whose metadata names a single licence would make that metadata wrong.
+
+[Unreleased]: https://github.com/lakmuslabs/lakmus/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/lakmuslabs/lakmus/releases/tag/v0.1.0

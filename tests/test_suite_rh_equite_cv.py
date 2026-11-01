@@ -27,6 +27,11 @@ CONTROLE = SUITE.parent / "equite-tri-cv-fr-controle"
 CASES = SUITE / "cases" / "pairs.jsonl"
 MINIMUM_FOR_AN_INTERVAL = 20
 
+# The sdist leaves `suites/` out, so these tests have nothing to read when run from one.
+pytestmark = pytest.mark.skipif(
+    not SUITE.is_dir(), reason="the suites are not part of the source distribution"
+)
+
 Masker = Callable[[str, Mapping[str, Any]], str]
 
 # Which maskers each variable is allowed to move. Masking all of them must make the two sides
