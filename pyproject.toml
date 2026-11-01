@@ -1,0 +1,80 @@
+[project]
+name = "lakmus"
+version = "0.0.1"
+description = "Share and run domain test suites against AI models, agents and MCP servers"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Lakmus Labs" }]
+keywords = ["evaluation", "testing", "llm", "agents", "mcp", "benchmark"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+dependencies = [
+  "typer>=0.12",
+  "pydantic>=2.7",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "pyyaml>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/lakmuslabs/lakmus"
+Source = "https://github.com/lakmuslabs/lakmus"
+Issues = "https://github.com/lakmuslabs/lakmus/issues"
+Changelog = "https://github.com/lakmuslabs/lakmus/blob/main/CHANGELOG.md"
+
+[project.scripts]
+lakmus = "lakmus.cli.main:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "respx>=0.21",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "types-pyyaml",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lakmus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Assertions are the point of a test; subprocess and temp paths are fixtures there.
+"tests/**" = ["S101", "S603", "S607", "S108"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["live: calls real providers, needs API keys"]
+addopts = "-m 'not live' --strict-markers --strict-config"
+testpaths = ["tests"]
