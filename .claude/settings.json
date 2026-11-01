@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run lakmus:*)",
+      "Bash(make check:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(git push:*)",
+      "Bash(uv publish:*)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "lakmuslabs": {
+      "source": { "source": "github", "repo": "lakmuslabs/claude-plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "lakmus-dev@lakmuslabs": true
+  }
+}
