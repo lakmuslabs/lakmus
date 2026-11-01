@@ -12,7 +12,7 @@ The unit is the test suite, not the model.
 
 > **Status: pre-release.** The suite format is at draft version 0.1 and the engine is in
 > development. The command set below is the v0.1 target; not all of it exists yet. The format may
-> change before 0.1 is tagged, and such changes are recorded in `docs/adr/`.
+> change before 0.1 is tagged.
 
 ## What a suite looks like
 
@@ -54,7 +54,8 @@ thresholds:
   score_gap: {max: 0.05}
 ```
 
-The full contract is in [docs/spec/suite-format.md](docs/spec/suite-format.md).
+The specification behind it — every field, the validation rules, the versioning policy — is
+published with release 0.1.
 
 ## Running a suite
 
@@ -83,12 +84,6 @@ Nothing leaves your machine. The CLI calls targets directly with your keys, read
 variables named in the suite or on the command line, and writes results to a local directory. There
 is no account and no server in the loop. A hub for publishing and comparing results is planned as a
 separate project that consumes `run.json`; publishing will be a deliberate step.
-
-## Documentation
-
-- [Architecture](docs/architecture/ARCHITECTURE.md) — modules, the run pipeline, the core interfaces.
-- [Suite format](docs/spec/suite-format.md) — the contract between suite authors, the CLI and the hub.
-- [Decision records](docs/adr/) — why the project is built the way it is.
 
 ## Contributing
 

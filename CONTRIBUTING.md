@@ -42,15 +42,16 @@ check` rarely surprises you.
 
 Anything that adds or changes a public interface — a CLI command or flag, the `Target` protocol, a
 scorer signature, a manifest field, a `run.json` field, a runtime dependency — starts with a
-decision record in [docs/adr/](docs/adr/) and waits for a decision. The template and the criteria
-are in the existing records; copy the most recent one.
+recorded decision before it is implemented. Open a change proposal issue describing the problem
+and what you would change; the decision is written down and settled there, and the issue is the
+reference the pull request links to.
 
 This is not ceremony. The suite format is a contract with people who will publish results against
 it, and `run.json` is consumed by tooling we do not control. Changing either by accident is the one
 mistake this project cannot absorb quietly.
 
-`docs/spec/suite-format.md` is the central contract and is not edited without a decision record and
-a format version bump.
+The suite format is the central contract. It does not change without a recorded decision and a
+format version bump, and results are never compared across format majors.
 
 ## Tests
 

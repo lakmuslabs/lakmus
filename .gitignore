@@ -17,6 +17,10 @@ htmlcov/
 # Lakmus output
 lakmus-runs/
 
+# Design documentation, kept local on purpose: specification, architecture and
+# decision records are working documents, not published artefacts.
+docs/
+
 # Local environment
 .env
 .env.*

@@ -45,6 +45,6 @@ vulnerability.
 - A suite author's code doing what its code says, once you have confirmed running it.
 - A target returning harmful, biased or wrong output. Measuring that is what the tool is for.
 - Results published to a hub being self-reported. Local-first execution is a deliberate trade-off
-  recorded in [ADR 0001](docs/adr/0001-local-first-execution.md); integrity relies on fingerprints
-  and replay, and on signatures in a later version.
+  recorded early in the project; integrity relies on fingerprints and replay, and on signatures in
+  a later version.
 - Denial of service against your own machine from a suite you chose to run.
