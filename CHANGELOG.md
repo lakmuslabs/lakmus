@@ -68,6 +68,15 @@ specification and in each run file. Changes to either are called out here under
   generated from the registry: each scorer's arity, direction and determinism, and for every
   option whether it is required and which values it accepts. Another implementation can refuse a
   bad option itself rather than trusting this one to.
+- The execution engine: sandboxed Jinja2 rendering where a missing field fails rather than
+  rendering nothing, bounded concurrency, a timeout per attempt and an optional limit on the
+  whole run, retries with exponential backoff and jitter that obey a provider's `Retry-After`,
+  and a local cache so that re-running a suite pays only for what failed.
+- A run that was interrupted, or that stopped itself after ten consecutive failures, records
+  `status: "interrupted"` and is refused by `comparable()`. A partial result can be read; it
+  cannot be compared or published.
+- A pair suite renders each case twice, once per side, and the two sides are separate calls: the
+  target never sees both, because seeing both is a different task.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

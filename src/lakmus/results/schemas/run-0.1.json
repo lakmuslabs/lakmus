@@ -513,6 +513,15 @@
       "title": "Signature",
       "type": "null"
     },
+    "status": {
+      "default": "complete",
+      "enum": [
+        "complete",
+        "interrupted"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
     "suite": {
       "$ref": "#/$defs/SuiteRef"
     },

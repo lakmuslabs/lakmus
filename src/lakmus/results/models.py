@@ -128,6 +128,22 @@ def canonical_parameter(value: ParameterValue) -> str:
 _EXPONENT = re.compile(r"e([+-])0*(\d+)")
 
 
+def cache_digest(fingerprint: "TargetFingerprint") -> str:
+    """The fingerprint digest a cache key uses: everything except `declared_version`.
+
+    A provider reveals the version it served only in a response, so the full digest changes after
+    the first call. Keying the cache on it would make every entry written before that response
+    unreusable, which is the opposite of what a cache is for.
+    """
+    return fingerprint_digest(
+        adapter=fingerprint.adapter,
+        kind=fingerprint.kind,
+        identity=fingerprint.identity,
+        declared_version=None,
+        parameters=dict(fingerprint.parameters),
+    )
+
+
 def fingerprint_digest(
     *,
     adapter: str,
@@ -357,6 +373,10 @@ class RunResult(_Strict):
 
     lakmus_format: Literal["0.1"]
     run_id: Ulid
+    status: Literal["complete", "interrupted"] = "complete"
+    """An interrupted run is readable and inspectable; it is not comparable and not publishable.
+    A partial result that could pass for a whole one is the worst artefact this tool could
+    produce."""
     created_at: datetime
     tool: ToolInfo
     suite: SuiteRef

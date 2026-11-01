@@ -130,6 +130,36 @@ def _unknown_builtin(root: Path) -> None:
     _edit_manifest(root, change)
 
 
+def _mixed_arity(root: Path) -> None:
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = [
+            {"id": "score_gap", "scorer": "builtin:pair_gap", "with": {"field": "score"}},
+            {"id": "accuracy", "scorer": "builtin:exact"},
+        ]
+        manifest["thresholds"] = {}
+
+    _edit_manifest(root, change)
+
+
+def _judge_without_repeats(root: Path) -> None:
+    """A non-deterministic scorer with one repeat hides the judge's own variance."""
+
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = [{"id": "helpfulness", "scorer": "scorers/judge.py:helpfulness"}]
+        manifest["thresholds"] = {}
+        manifest["run"]["repeats"] = 1
+
+    _edit_manifest(root, change)
+    (root / "scorers" / "judge.py").write_text(
+        "from lakmus.scorers import Case, Score, scorer\n"
+        "from lakmus.targets.base import TargetOutput\n\n\n"
+        '@scorer(name="helpfulness", higher_is_better=True, deterministic=False)\n'
+        "def helpfulness(case: Case, output: TargetOutput) -> Score:\n"
+        "    return Score.of(1.0)\n",
+        encoding="utf-8",
+    )
+
+
 def _unknown_scorer_option(root: Path) -> None:
     def change(manifest: dict[str, Any]) -> None:
         manifest["metrics"][1]["with"] = {"feild": "decision"}
@@ -191,6 +221,8 @@ BREAKAGES = (
     Breakage(Code.SCORER_NOT_CALLABLE, _scorer_without_the_function, run_suite_code=True),
     Breakage(Code.SCORER_UNKNOWN_BUILTIN, _unknown_builtin),
     Breakage(Code.SCORER_OPTION_REFUSED, _unknown_scorer_option),
+    Breakage(Code.METRIC_ARITY_MIXED, _mixed_arity),
+    Breakage(Code.REPEATS_TOO_FEW, _judge_without_repeats, run_suite_code=True),
     Breakage(Code.METRIC_DUPLICATE_ID, _duplicate_metric_id),
     Breakage(Code.THRESHOLD_UNKNOWN_METRIC, _threshold_on_unknown_metric),
     Breakage(Code.THRESHOLD_WITHOUT_BOUND, _threshold_without_bound),
@@ -385,7 +417,7 @@ def test_without_a_registry_the_scorer_names_are_not_checked(valid_suite: Path) 
     assert validate(valid_suite) == []
 
 
-EVERY_BUILTIN = [
+SINGLE_BUILTINS = [
     {"id": "m_exact", "scorer": "builtin:exact", "with": {"expected": "expected"}},
     {"id": "m_regex", "scorer": "builtin:regex", "with": {"pattern": r"\d{14}", "flags": "i"}},
     {
@@ -399,21 +431,35 @@ EVERY_BUILTIN = [
         "with": {"field": "decision", "normalise": ["trim", "nfc"]},
     },
     {"id": "m_prf", "scorer": "builtin:precision_recall_f1", "with": {"report": "f1"}},
+]
+PAIR_BUILTINS = [
     {"id": "m_gap", "scorer": "builtin:pair_gap", "with": {"field": "score"}},
     {"id": "m_flip", "scorer": "builtin:pair_flip", "with": {"field": "decision"}},
 ]
 
 
-def test_every_built_in_can_actually_be_declared_in_a_manifest(valid_suite: Path) -> None:
+@pytest.mark.parametrize(
+    ("metrics", "group_by"),
+    [
+        pytest.param(SINGLE_BUILTINS, [], id="the-five-single-answer-built-ins"),
+        pytest.param(PAIR_BUILTINS, ["variable"], id="the-two-pair-built-ins"),
+    ],
+)
+def test_every_built_in_can_actually_be_declared_in_a_manifest(
+    valid_suite: Path, metrics: list[dict[str, Any]], group_by: list[str]
+) -> None:
     """The test that was missing.
 
     `json_schema` configures itself with a mapping, and `with` accepted only scalars and lists, so
     one of the seven was undeclarable — and nothing noticed, because no test declared any built-in
     but `pair_flip` in a real manifest.
+
+    Split in two because a suite is either a pair suite or it is not, which is the rule the first
+    version of this test violated.
     """
 
     def change(manifest: dict[str, Any]) -> None:
-        manifest["metrics"] = EVERY_BUILTIN
+        manifest["metrics"] = [{**metric, "group_by": group_by} for metric in metrics]
         manifest["thresholds"] = {}
 
     _edit_manifest(valid_suite, change)

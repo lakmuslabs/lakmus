@@ -50,6 +50,22 @@ def _index_below(state: int, bound: int) -> tuple[int, int]:
             return state, draw % bound
 
 
+def sample_indices(count: int, size: int, *, seed: int) -> tuple[int, ...]:
+    """`size` distinct indices below `count`, in order, drawn reproducibly.
+
+    The same generator as the bootstrap, for the same reason: a suite that samples its cases has
+    to sample the same ones on another machine, in another language, for a result to mean anything.
+    """
+    if size >= count:
+        return tuple(range(count))
+    state = seed & _MASK64
+    chosen: set[int] = set()
+    while len(chosen) < size:
+        state, index = _index_below(state, count)
+        chosen.add(index)
+    return tuple(sorted(chosen))
+
+
 def mean(values: Sequence[float]) -> float:
     if not values:
         raise ValueError("mean of no values")

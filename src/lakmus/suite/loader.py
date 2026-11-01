@@ -136,14 +136,17 @@ def inspect(
     findings += _check_gitattributes(root)
 
     case_ids = _check_cases(root, manifest, findings)
-    findings += _check_builtin_scorers(manifest, scorers)
-    findings += _check_scorers(
+
+    builtin_findings, resolved = _check_builtin_scorers(manifest, scorers)
+    findings += builtin_findings
+    suite_findings, from_suite = _check_scorers(
         root,
         manifest,
         consent=run_suite_code,
         rejected=_rejected_paths(path_findings),
-        scorers=scorers,
     )
+    findings += suite_findings
+    findings += _check_metric_metadata(manifest, {**resolved, **from_suite})
 
     if any(finding.severity == "error" for finding in findings):
         return findings, None
@@ -485,11 +488,16 @@ def _granted(consent: SuiteCodeConsent, modules: tuple[str, ...]) -> bool:
 
 def _check_builtin_scorers(
     manifest: Manifest, scorers: "Mapping[str, ScorerSpec] | None"
-) -> list[Finding]:
-    """Check every `builtin:` reference and its options, without importing anything."""
-    if scorers is None:
-        return []
+) -> tuple[list[Finding], dict[str, "ScorerSpec"]]:
+    """Check every `builtin:` reference and its options, without importing anything.
 
+    Returns the specs it resolved as well, because two manifest-level rules — that arities agree
+    and that a judge-scored metric has repeats — need them and cannot be checked per metric.
+    """
+    if scorers is None:
+        return [], {}
+
+    resolved: dict[str, ScorerSpec] = {}
     findings: list[Finding] = []
     for metric in manifest.metrics:
         parsed = parse_scorer_ref(metric.scorer)
@@ -510,7 +518,47 @@ def _check_builtin_scorers(
                 )
             )
             continue
+        resolved[metric.id] = spec
         findings += _check_options(metric.id, spec, metric.options)
+    return findings, resolved
+
+
+def _check_metric_metadata(manifest: Manifest, specs: "Mapping[str, ScorerSpec]") -> list[Finding]:
+    """Two rules about the metric list as a whole, rather than about one metric.
+
+    Both need a scorer's metadata, so both are skipped for a metric whose spec could not be
+    resolved — a suite scorer under `--no-code`, for instance.
+    """
+    findings: list[Finding] = []
+    arities = {metric_id: spec.arity for metric_id, spec in specs.items()}
+    if len(set(arities.values())) > 1:
+        pairs = sorted(name for name, arity in arities.items() if arity == "pair")
+        singles = sorted(name for name, arity in arities.items() if arity == "single")
+        findings.append(
+            Finding(
+                code=Code.METRIC_ARITY_MIXED,
+                location=f"{MANIFEST_FILENAME}: metrics",
+                message=(
+                    f"a suite is either a pair suite or it is not: {', '.join(pairs)} score a "
+                    f"pair and {', '.join(singles)} score a single answer. What a single-answer "
+                    f"metric would mean against two answers is undefined."
+                ),
+            )
+        )
+
+    judged = sorted(metric_id for metric_id, spec in specs.items() if not spec.deterministic)
+    if judged and manifest.run.repeats < 2:
+        findings.append(
+            Finding(
+                code=Code.REPEATS_TOO_FEW,
+                location=f"{MANIFEST_FILENAME}: run.repeats",
+                message=(
+                    f"{', '.join(judged)} use a non-deterministic scorer, so run.repeats must be "
+                    f"at least 2. With one repeat the judge's own variance is invisible and the "
+                    f"confidence interval would understate the uncertainty without saying so."
+                ),
+            )
+        )
     return findings
 
 
@@ -562,12 +610,11 @@ def _check_scorers(
     *,
     consent: SuiteCodeConsent,
     rejected: frozenset[str] = frozenset(),
-    scorers: "Mapping[str, ScorerSpec] | None" = None,
-) -> list[Finding]:
+) -> tuple[list[Finding], dict[str, "ScorerSpec"]]:
     """Import every suite scorer module, and check the function it names carries `@scorer`."""
     modules = _scorer_modules(root, manifest, rejected)
     if not modules or not _granted(consent, tuple(name for name, _ in modules)):
-        return []
+        return [], {}
 
     wanted: dict[str, set[str]] = {}
     for metric in manifest.metrics:
@@ -582,6 +629,7 @@ def _check_scorers(
             by_module.setdefault(parsed.module, []).append(metric)
 
     findings: list[Finding] = []
+    resolved: dict[str, ScorerSpec] = {}
     for relative, path in modules:
         module = _import_module(path, relative, findings)
         if module is None:
@@ -612,8 +660,9 @@ def _check_scorers(
                 continue
             for metric in by_module.get(relative, []):
                 if _suite_scorer_of(metric) == SuiteScorer(relative, function_name):
+                    resolved[metric.id] = spec
                     findings += _check_options(metric.id, spec, metric.options)
-    return findings
+    return findings, resolved
 
 
 SCORER_SPEC_ATTRIBUTE = "__lakmus_scorer__"

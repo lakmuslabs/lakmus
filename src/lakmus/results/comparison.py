@@ -15,6 +15,9 @@ def comparable(left: RunResult, right: RunResult) -> bool:
     can change a measurement — and the same set of configuration overrides, since an override
     changes the measurement without touching the digest.
     """
+    if left.status != "complete" or right.status != "complete":
+        # A partial run measured a subset nobody chose. It can be read; it cannot be compared.
+        return False
     return _key(left) == _key(right)
 
 
