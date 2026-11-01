@@ -32,8 +32,12 @@ specification and in each run file. Changes to either are called out here under
   reads it.
 - `comparable()`: two runs are comparable when the format version, `inputs_sha256` and the
   set of configuration overrides all match. The target is deliberately not part of it.
+- A target fingerprint refuses to carry a credential: userinfo and query strings are stripped
+  from a URL, an identity that assigns a secret is refused, and so is a parameter named like
+  one. Scores that are not finite numbers are refused at the scorer boundary, so a run file is
+  always valid JSON.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
-  `lakmus/suite/schema/suite-0.1.json`.
+  `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and
   is therefore the comparability key, and `content_sha256` for the whole directory. Relative
   paths are normalised to NFC so that an accented filename digests the same on any

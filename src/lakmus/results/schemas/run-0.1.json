@@ -82,6 +82,7 @@
     },
     "Latency": {
       "additionalProperties": false,
+      "description": "Latency percentiles, by the same interpolation rule as a confidence interval, rounded to\nthe nearest millisecond. Sub-millisecond precision would be noise from a network call.",
       "properties": {
         "p50": {
           "minimum": 0,
@@ -219,6 +220,12 @@
       "additionalProperties": false,
       "description": "The values a run actually used, and which of them the invocation replaced.",
       "properties": {
+        "bootstrap_resamples": {
+          "default": 1000,
+          "exclusiveMinimum": 0,
+          "title": "Bootstrap Resamples",
+          "type": "integer"
+        },
         "concurrency": {
           "exclusiveMinimum": 0,
           "title": "Concurrency",

@@ -8,6 +8,8 @@ digest it does not have, and it cannot carry a credential.
 
 import hashlib
 import json
+import math
+import re
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlsplit
@@ -23,7 +25,25 @@ ParameterValue = float | int | str | bool
 
 
 class _Strict(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", regex_engine="python-re")
+    # allow_inf_nan=False because this model is written to a file: `json.dumps` spells a NaN as the
+    # bare token `NaN`, which no JSON parser accepts, and the published schema types these as
+    # numbers. A scorer that returns one is a scorer error, not a result.
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", regex_engine="python-re", allow_inf_nan=False
+    )
+
+
+_SECRET_NAME = re.compile(
+    r"api[-_]?key|secret|password|passwd|authorization|bearer"
+    r"|access[-_]?token|refresh[-_]?token",
+    re.IGNORECASE,
+)
+"""Names that have no business in a published record. Deliberately narrow: `max_tokens` is a
+generation parameter and must keep working."""
+
+_SECRET_ASSIGNMENT = re.compile(rf"(?:{_SECRET_NAME.pattern})\s*[=:]", re.IGNORECASE)
+"""The same names as an assignment, for an identity that is a command line rather than a URL —
+`mcp-stdio:"python server.py --api-key=..."` is syntax the architecture names."""
 
 
 class ToolInfo(_Strict):
@@ -42,18 +62,54 @@ class SuiteRef(_Strict):
 
 
 def sanitise_identity(identity: str) -> str:
-    """Strip anything from a target identity that could carry a secret.
+    """Reduce a target identity to its canonical, publishable form.
 
-    A fingerprint is published. An endpoint URL arrives with userinfo, a query string or both, and
-    either is a plausible place for a token, so neither survives into the record.
+    A fingerprint is published, and an endpoint URL arrives with userinfo, a query string, a
+    fragment or an upper-case scheme. None of those survive: the first two are plausible places
+    for a token, and the last two would give two spellings of one endpoint two different digests.
+
+    What this cannot do is clean an identity that is not a URL — a command line, for instance.
+    There is no safe general way to strip a secret out of one, so the model refuses such an
+    identity instead of pretending to sanitise it.
     """
     parts = urlsplit(identity)
-    if not parts.scheme or not parts.netloc:
+    if not parts.netloc:
         return identity
     host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
     if parts.port is not None:
         host = f"{host}:{parts.port}"
-    return f"{parts.scheme}://{host}{parts.path}"
+    authority = f"{parts.scheme.lower()}://" if parts.scheme else "//"
+    return f"{authority}{host}{parts.path}"
+
+
+def canonical_parameter(value: ParameterValue) -> str:
+    """One spelling per value, so that a digest is reproducible outside Python.
+
+    `json.dumps` writes numbers the way CPython does: `1e+22` where other runtimes write `1e22`,
+    and `0.0` where `0` means the same thing. A fingerprint digest is compared across
+    implementations and used as a cache key, so every value becomes a string under this rule:
+    booleans as `true`/`false`, a float with no fractional part as an integer, and an exponent
+    with no plus sign and no leading zeroes.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"a parameter must be a finite number, got {value!r}")
+        if value == int(value):
+            return str(int(value))
+        return _EXPONENT.sub(
+            lambda match: "e" + ("" if match.group(1) == "+" else "-") + match.group(2),
+            repr(value),
+        )
+    return value
+
+
+_EXPONENT = re.compile(r"e([+-])0*(\d+)")
 
 
 def fingerprint_digest(
@@ -71,7 +127,7 @@ def fingerprint_digest(
             "kind": kind,
             "identity": identity,
             "declared_version": declared_version,
-            "parameters": parameters,
+            "parameters": {name: canonical_parameter(v) for name, v in parameters.items()},
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -123,12 +179,38 @@ class TargetFingerprint(_Strict):
         )
 
     @model_validator(mode="after")
-    def _digest_and_identity_hold(self) -> Self:
-        if self.identity != sanitise_identity(self.identity):
+    def _carries_no_credential(self) -> Self:
+        parts = urlsplit(self.identity)
+        if parts.username or parts.password or parts.query:
             raise ValueError(
                 "a target identity must carry no userinfo and no query string: a fingerprint is "
                 "published, and either is a plausible place for a credential"
             )
+        if _SECRET_ASSIGNMENT.search(self.identity):
+            raise ValueError(
+                "a target identity must not assign a credential; pass it through an environment "
+                "variable named in the configuration instead"
+            )
+        named = sorted(name for name in self.parameters if _SECRET_NAME.search(name))
+        if named:
+            raise ValueError(
+                "a fingerprint is published, so it carries no credential: remove "
+                + ", ".join(named)
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _identity_is_canonical(self) -> Self:
+        canonical = sanitise_identity(self.identity)
+        if self.identity != canonical:
+            raise ValueError(
+                f"a target identity must be in canonical form: {canonical!r}, not "
+                f"{self.identity!r}. Two spellings of one endpoint would digest differently."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _digest_holds(self) -> Self:
         expected = fingerprint_digest(
             adapter=self.adapter,
             kind=self.kind,
@@ -149,6 +231,11 @@ class RunConfig(_Strict):
     seed: int
     timeout_s: Annotated[int, Field(gt=0)]
     concurrency: Annotated[int, Field(gt=0)]
+    """Bounded concurrency the run used. Provenance for the latencies, not part of
+    comparability: it cannot change a measurement."""
+    bootstrap_resamples: Annotated[int, Field(gt=0)] = 1000
+    """Recorded because an interval is only recomputable from the seed when the resample count is
+    known too."""
     overrides: tuple[str, ...] = ()
     """Manifest fields this invocation replaced. Compared field by field when two runs are checked
     for comparability, so the order is canonical."""
@@ -213,8 +300,10 @@ class MetricSummary(_Measured):
     def _absences_are_explained(self) -> Self:
         if (self.ci95 is None) == (self.ci_unavailable_reason is None):
             raise ValueError("exactly one of ci95 and ci_unavailable_reason must be set")
-        if self.threshold is None and (self.passed is not None or self.conclusive is not None):
-            raise ValueError("passed and conclusive need a threshold")
+        if (self.threshold is None) != (self.passed is None):
+            raise ValueError("passed is set exactly when a threshold is declared")
+        if self.threshold is None and self.conclusive is not None:
+            raise ValueError("conclusive needs a threshold")
         return self
 
 
@@ -227,6 +316,9 @@ class Cost(_Strict):
 
 
 class Latency(_Strict):
+    """Latency percentiles, by the same interpolation rule as a confidence interval, rounded to
+    the nearest millisecond. Sub-millisecond precision would be noise from a network call."""
+
     p50: Annotated[int, Field(ge=0)]
     p95: Annotated[int, Field(ge=0)]
 

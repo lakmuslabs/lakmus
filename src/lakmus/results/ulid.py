@@ -41,6 +41,10 @@ def encode(timestamp_ms: int, randomness: int) -> str:
 def generate(clock: Clock, entropy: Random) -> str:
     """A new ULID from an injected clock and random source."""
     moment = clock()
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        # A naive datetime is interpreted in the machine's local zone, which would make a run id
+        # depend on where it was produced.
+        raise ValueError("the clock must return an aware datetime")
     timestamp_ms = int(moment.timestamp() * 1000)
     return encode(timestamp_ms, entropy.getrandbits(_RANDOM_BITS))
 

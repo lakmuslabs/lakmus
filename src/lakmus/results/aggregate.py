@@ -5,6 +5,7 @@ knows nothing about targets, prompts or manifests, which is what lets it be test
 instead of a run.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -26,6 +27,12 @@ class CaseObservation:
     def __post_init__(self) -> None:
         if not self.scores:
             raise ValueError(f"case {self.case_id!r} has no score; count it in n_errors instead")
+        if not all(math.isfinite(score) for score in self.scores):
+            # A scorer is third-party code. Let a NaN through and it reaches a run file as the
+            # bare token `NaN`, which no JSON parser accepts, and a verdict nobody measured.
+            raise ValueError(
+                f"case {self.case_id!r} has a score that is not a finite number: {self.scores}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +45,19 @@ class MetricObservations:
     n_errors: int = 0
     threshold: ThresholdApplied | None = None
     group_by: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.deterministic:
+            return
+        single = sorted(case.case_id for case in self.cases if len(case.scores) < 2)
+        if single:
+            # With one repeat a judge's variance is invisible, and the interval would understate
+            # the uncertainty without saying so. The engine sets repeats; this is the boundary
+            # where the requirement can still be caught.
+            raise ValueError(
+                f"metric {self.metric_id!r} is not deterministic, so every case needs at least "
+                f"two repeats; these have one: {', '.join(single)}"
+            )
 
 
 def _satisfies(value: float, threshold: ThresholdApplied) -> bool:
@@ -55,8 +75,12 @@ def _verdict(
     number of cases. `conclusive` carries what the interval adds: false means the interval
     straddles the threshold, so this verdict could go the other way next time.
     """
-    if threshold is None or value is None:
+    if threshold is None:
         return None, None
+    if value is None:
+        # A gate was declared and nothing was measured. Reporting `None` here would read as
+        # "no gate", and a run where every case failed would exit 0.
+        return False, None
     passed = _satisfies(value, threshold)
     if ci95 is None:
         return passed, None

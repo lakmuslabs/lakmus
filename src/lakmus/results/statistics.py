@@ -91,7 +91,9 @@ def bootstrap_ci(
 
     `seed` comes from the run configuration. The generator is seeded once and consumed in order,
     so the interval depends on the seed, the case means and the resample count, and on nothing
-    else — not on the machine, not on the Python version, not on `PYTHONHASHSEED`.
+    else: no global random source, no salted hash, no iteration order. Integer arithmetic and
+    float addition are all it uses, so another implementation of this function reproduces it —
+    which is checked by a pinned vector rather than asserted here.
     """
     means = case_means(cases)
     if len(means) < MINIMUM_CASES:

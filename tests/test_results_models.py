@@ -1,5 +1,6 @@
 """Invariants the run file enforces rather than hopes for."""
 
+import json
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -8,12 +9,14 @@ from pydantic import ValidationError
 from lakmus.results.models import (
     Latency,
     MetricSummary,
+    ParameterValue,
     RunConfig,
     RunResult,
     SuiteRef,
     TargetFingerprint,
     ThresholdApplied,
     ToolInfo,
+    canonical_parameter,
     sanitise_identity,
 )
 
@@ -178,8 +181,16 @@ def test_a_metric_without_an_interval_has_to_say_why() -> None:
 
 
 def test_a_verdict_without_a_threshold_is_refused() -> None:
-    with pytest.raises(ValidationError, match="need a threshold"):
+    with pytest.raises(ValidationError, match="exactly when a threshold"):
         _summary(passed=True)
+    with pytest.raises(ValidationError, match="conclusive needs a threshold"):
+        _summary(conclusive=True)
+
+
+def test_a_threshold_without_a_verdict_is_refused() -> None:
+    """So that a consumer can never read a declared gate as unevaluated."""
+    with pytest.raises(ValidationError, match="exactly when a threshold"):
+        _summary(threshold=ThresholdApplied(max=0.6))
 
 
 def test_an_interval_must_be_ordered() -> None:
@@ -208,3 +219,124 @@ def test_a_run_round_trips_through_its_own_json() -> None:
     run = _run()
 
     assert RunResult.model_validate(run.model_dump_json_document()) == run
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        pytest.param("http://[::1]:8000/agent", "http://[::1]:8000/agent", id="ipv6-with-a-port"),
+        pytest.param("http://[2001:db8::1]/v1", "http://[2001:db8::1]/v1", id="ipv6-bare"),
+        pytest.param("HTTPS://API.Example.com/v1", "https://api.example.com/v1", id="case"),
+        pytest.param(
+            "https://api.example.com/v1#frag", "https://api.example.com/v1", id="fragment"
+        ),
+        pytest.param("//user:pw@api.example.com/v1", "//api.example.com/v1", id="no-scheme"),
+    ],
+)
+def test_an_identity_is_reduced_to_one_publishable_spelling(identity: str, expected: str) -> None:
+    assert sanitise_identity(identity) == expected
+    created = TargetFingerprint.create(adapter="openai-compatible", kind="model", identity=identity)
+    assert created.identity == expected
+
+
+def test_two_spellings_of_one_endpoint_digest_the_same() -> None:
+    """Otherwise a cache miss, and two runs of one target that look incomparable."""
+    first = TargetFingerprint.create(
+        adapter="openai-compatible", kind="model", identity="HTTPS://API.Example.com/v1#x"
+    )
+    second = TargetFingerprint.create(
+        adapter="openai-compatible", kind="model", identity="https://api.example.com/v1"
+    )
+
+    assert first.sha256 == second.sha256
+
+
+def test_an_identity_that_assigns_a_credential_is_refused() -> None:
+    """An MCP server is named by a command line, which cannot be sanitised safely."""
+    with pytest.raises(ValidationError, match="must not assign a credential"):
+        TargetFingerprint.create(
+            adapter="mcp-stdio", kind="mcp", identity="python server.py --api-key=sk-live-1"
+        )
+
+
+def test_a_command_line_without_a_credential_is_left_alone() -> None:
+    identity = "python server.py --max-tokens=512 --token-budget=5"
+
+    fingerprint = TargetFingerprint.create(adapter="mcp-stdio", kind="mcp", identity=identity)
+
+    assert fingerprint.identity == identity
+
+
+@pytest.mark.parametrize(
+    "name", ["api_key", "API-KEY", "secret", "password", "authorization", "access_token"]
+)
+def test_a_parameter_that_names_a_credential_is_refused(name: str) -> None:
+    """The rule is that no credential enters a fingerprint, not just none in the URL."""
+    with pytest.raises(ValidationError, match="carries no credential"):
+        TargetFingerprint.create(
+            adapter="openai", kind="model", identity="gpt-x", parameters={name: "sk-live-1"}
+        )
+
+
+def test_a_generation_parameter_that_merely_looks_like_one_is_kept() -> None:
+    fingerprint = TargetFingerprint.create(
+        adapter="openai", kind="model", identity="gpt-x", parameters={"max_tokens": 512}
+    )
+
+    assert fingerprint.parameters == {"max_tokens": 512}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(True, "true", id="true"),
+        pytest.param(False, "false", id="false"),
+        pytest.param(7, "7", id="int"),
+        pytest.param(0.0, "0", id="zero-as-a-float"),
+        pytest.param(2.0, "2", id="integral-float"),
+        pytest.param(0.7, "0.7", id="fraction"),
+        pytest.param(1e22, "10000000000000000000000", id="large-float-has-no-exponent"),
+        pytest.param(1e-05, "1e-5", id="exponent-without-leading-zeroes"),
+        pytest.param("gpt-x", "gpt-x", id="string"),
+    ],
+)
+def test_a_parameter_has_one_spelling_whatever_runtime_reads_it(
+    value: ParameterValue, expected: str
+) -> None:
+    """`json.dumps` writes 1e+22 where other runtimes write 1e22, and 0.0 where 0 is the same.
+
+    A fingerprint digest is compared across implementations and used as a cache key.
+    """
+    assert canonical_parameter(value) == expected
+
+
+def test_the_same_number_written_two_ways_digests_the_same() -> None:
+    as_int = TargetFingerprint.create(
+        adapter="openai", kind="model", identity="gpt-x", parameters={"temperature": 0}
+    )
+    as_float = TargetFingerprint.create(
+        adapter="openai", kind="model", identity="gpt-x", parameters={"temperature": 0.0}
+    )
+
+    assert as_int.sha256 == as_float.sha256
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_parameter_is_refused(value: float) -> None:
+    with pytest.raises((ValidationError, ValueError)):
+        TargetFingerprint.create(
+            adapter="openai", kind="model", identity="gpt-x", parameters={"top_p": value}
+        )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_a_non_finite_measurement_is_refused(value: float) -> None:
+    """json.dumps spells a NaN as a bare token no JSON parser accepts."""
+    with pytest.raises(ValidationError):
+        _summary(value=value)
+
+
+def test_a_run_file_is_valid_json() -> None:
+    document = _run().model_dump_json_document()
+
+    assert json.loads(json.dumps(document, allow_nan=False)) == document

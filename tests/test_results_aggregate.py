@@ -40,8 +40,21 @@ def test_a_metric_over_no_cases_has_no_value() -> None:
     assert summary.value is None
     assert summary.n_cases == 0
     assert summary.n_errors == 12
-    assert summary.passed is None
     assert summary.ci_unavailable_reason is not None
+
+
+def test_a_gate_that_could_not_be_evaluated_does_not_pass() -> None:
+    """A run where every case failed must not exit 0.
+
+    Reporting `None` here would read as "no threshold declared", which is a different thing.
+    """
+    summary = summarise(
+        _observations(cases=(), n_errors=20, threshold=ThresholdApplied(max=0.05)), seed=SEED
+    )
+
+    assert summary.value is None
+    assert summary.passed is False
+    assert summary.conclusive is None
 
 
 def test_errors_are_counted_beside_the_cases_that_worked() -> None:
@@ -169,3 +182,51 @@ def test_aggregation_is_reproducible_from_the_seed() -> None:
     observations = [_observations(cases=_cases([0.0, 0.3] * 15))]
 
     assert aggregate(observations, seed=SEED) == aggregate(observations, seed=SEED)
+
+
+@pytest.mark.parametrize("score", [float("nan"), float("inf"), float("-inf")])
+def test_a_score_that_is_not_a_finite_number_is_refused(score: float) -> None:
+    """A scorer is third-party code, and a NaN reaches a run file as a token no parser accepts."""
+    with pytest.raises(ValueError, match="finite number"):
+        CaseObservation(case_id="c-0", scores=(score,))
+
+
+def test_a_judge_scored_metric_needs_more_than_one_repeat() -> None:
+    """With one repeat the judge's variance is invisible and the interval would understate it."""
+    with pytest.raises(ValueError, match=r"at least\s+two repeats"):
+        MetricObservations(
+            metric_id="helpfulness",
+            deterministic=False,
+            cases=_cases([0.8, 0.9]),
+        )
+
+
+def test_a_judge_scored_metric_with_repeats_is_accepted() -> None:
+    cases = tuple(CaseObservation(case_id=f"c-{index}", scores=(0.8, 0.9)) for index in range(10))
+
+    summary = summarise(
+        MetricObservations(metric_id="helpfulness", deterministic=False, cases=cases), seed=SEED
+    )
+
+    assert summary.deterministic is False
+    assert summary.n_observations == 20
+    assert summary.ci95 is not None
+
+
+@pytest.mark.parametrize(
+    ("values", "passed", "conclusive"),
+    [
+        pytest.param([0.0, 1.0] * 10, True, False, id="interval-straddles-both-bounds"),
+        pytest.param([0.95] * 20, False, True, id="interval-wholly-above-the-maximum"),
+        pytest.param([0.05] * 20, False, True, id="interval-wholly-below-the-minimum"),
+    ],
+)
+def test_a_two_sided_band_is_judged_at_both_ends(
+    values: list[float], passed: bool, conclusive: bool
+) -> None:
+    summary = summarise(
+        _observations(cases=_cases(values), threshold=ThresholdApplied(min=0.4, max=0.6)),
+        seed=SEED,
+    )
+
+    assert (summary.passed, summary.conclusive) == (passed, conclusive)

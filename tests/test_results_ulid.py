@@ -69,3 +69,20 @@ def test_a_later_run_sorts_after_an_earlier_one() -> None:
 def test_decoding_refuses_what_is_not_a_ulid(bad: str) -> None:
     with pytest.raises(ValueError):
         ulid.timestamp_of(bad)
+
+
+GOLDEN_ID = "01M6BHP54N0SKHS01HFYHV2YCX"
+"""A fixed clock and a fixed seed give a fixed id. Pinned so that a clock or a random source read
+from a global, rather than taken as an argument, fails here."""
+
+
+def test_a_fixed_clock_and_seed_give_the_pinned_id() -> None:
+    assert ulid.generate(lambda: FIXED_MOMENT, Random(42)) == GOLDEN_ID
+
+
+def test_a_naive_clock_is_refused() -> None:
+    """Otherwise a run id would depend on the timezone of the machine that produced it."""
+    naive = datetime(2026, 11, 1, 12, 34, 56)
+
+    with pytest.raises(ValueError, match="aware datetime"):
+        ulid.generate(lambda: naive, Random(42))
