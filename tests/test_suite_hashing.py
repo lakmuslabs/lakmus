@@ -137,3 +137,135 @@ def test_the_algorithm_name_is_part_of_the_digest(valid_suite: Path) -> None:
     suite = load(valid_suite, run_suite_code=False)
 
     assert inputs_sha256(valid_suite, suite.manifest) != content_sha256(valid_suite, suite.manifest)
+
+
+MINIMAL_MANIFEST = """\
+lakmus: "0.1"
+id: ops/golden
+version: 1.0.0
+title: Golden vector
+language: en
+license: MIT
+target:
+  kind: model
+  input: prompts/p.j2
+cases:
+  source: cases/c.jsonl
+metrics:
+  - id: exact
+    scorer: builtin:exact_match
+"""
+
+
+def _minimal_suite(root: Path) -> Path:
+    (root / "cases").mkdir(parents=True)
+    (root / "prompts").mkdir()
+    (root / MANIFEST_FILENAME).write_text(MINIMAL_MANIFEST, encoding="utf-8")
+    (root / "cases" / "c.jsonl").write_text('{"id": "c-1"}\n', encoding="utf-8")
+    (root / "prompts" / "p.j2").write_text("{{ id }}\n", encoding="utf-8")
+    (root / ".gitattributes").write_text("* -text\n", encoding="utf-8")
+    return root
+
+
+GOLDEN_INPUTS_SHA256 = "001e7beee52e321180b75d52ae4facbd179d657322dd226d68713c108f4cebc1"
+"""Pinned on purpose. `inputs_sha256` is the cross-implementation comparability key, so this value
+may change only together with the algorithm name in `hashing.INPUTS_ALGORITHM`."""
+
+
+def test_the_inputs_digest_matches_its_published_vector(tmp_path: Path) -> None:
+    root = _minimal_suite(tmp_path / "golden")
+
+    suite = load(root, run_suite_code=False)
+
+    assert suite.inputs_sha256 == GOLDEN_INPUTS_SHA256
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "contents"),
+    [
+        pytest.param("tpl/screener.j2", "Autre consigne : {{ a }}\n", id="prompt-outside-prompts"),
+        pytest.param(
+            "lib/gap.py", "def mean_abs_gap(c, o):\n    return 999.0\n", id="scorer-outside-scorers"
+        ),
+    ],
+)
+def test_a_declared_input_outside_the_usual_directory_is_still_covered(
+    valid_suite: Path, relative_path: str, contents: str
+) -> None:
+    """The format lets a suite keep its prompt or scorer anywhere.
+
+    Covering only `prompts/` and `scorers/` meant such a suite could change its prompt entirely
+    while `inputs_sha256` stayed put, which is the one thing that digest must never do.
+    """
+    moved = valid_suite / relative_path
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    if relative_path.endswith(".j2"):
+        (valid_suite / "prompts" / "screener.j2").rename(moved)
+        _edit_manifest(
+            valid_suite,
+            "target",
+            {
+                "kind": "model",
+                "input": relative_path,
+                "output": {"type": "json", "schema": {"score": "number", "decision": "string"}},
+            },
+        )
+    else:
+        (valid_suite / "scorers" / "pair_gap.py").rename(moved)
+        _edit_manifest(
+            valid_suite,
+            "metrics",
+            [
+                {
+                    "id": "score_gap",
+                    "scorer": f"{relative_path}:mean_abs_gap",
+                    "group_by": ["variable"],
+                },
+                {"id": "decision_flip_rate", "scorer": "builtin:pair_flip"},
+            ],
+        )
+    before_inputs, _ = _digests(valid_suite)
+
+    moved.write_text(contents, encoding="utf-8")
+    after_inputs, _ = _digests(valid_suite)
+
+    assert after_inputs != before_inputs
+
+
+def test_an_accented_filename_digests_the_same_however_the_filesystem_stores_it(
+    tmp_path: Path,
+) -> None:
+    """NFC and NFD spell the same name with different bytes.
+
+    macOS and Linux disagree about which to store, and suites carry accented French names. Without
+    normalisation, copying a suite between two machines changed what it claimed to have measured.
+    """
+    import unicodedata
+
+    composed = _minimal_suite(tmp_path / "nfc")
+    decomposed = _minimal_suite(tmp_path / "nfd")
+    name = "écran.j2"
+    (composed / "prompts" / unicodedata.normalize("NFC", name)).write_text("x\n", encoding="utf-8")
+    (decomposed / "prompts" / unicodedata.normalize("NFD", name)).write_text(
+        "x\n", encoding="utf-8"
+    )
+
+    assert _digests(composed) == _digests(decomposed)
+
+
+@pytest.mark.parametrize("junk", [".DS_Store", "Thumbs.db", "__pycache__/pair_gap.cpython-312.pyc"])
+def test_what_an_operating_system_leaves_behind_does_not_change_a_digest(
+    valid_suite: Path, junk: str
+) -> None:
+    """Two checkouts of one commit must agree on what they measured.
+
+    On macOS a stray .DS_Store inside prompts/ is routine, and it used to move the comparability
+    key.
+    """
+    before = _digests(valid_suite)
+
+    noise = valid_suite / "prompts" / junk
+    noise.parent.mkdir(parents=True, exist_ok=True)
+    noise.write_bytes(b"\x00junk")
+
+    assert _digests(valid_suite) == before

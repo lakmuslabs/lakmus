@@ -1,14 +1,36 @@
 """`lakmus init`."""
 
 import json
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import TypeAdapter, ValidationError
 
 from lakmus.errors import ExitCode
 from lakmus.suite.loader import GITATTRIBUTES_LINE, MANIFEST_FILENAME, inspect
-from lakmus.suite.models import ALLOWED_LICENCES, FORMAT_VERSION
+from lakmus.suite.models import ALLOWED_LICENCES, FORMAT_VERSION, LanguageTag, SpdxId, SuiteId
+
+
+class TargetKind(StrEnum):
+    MODEL = "model"
+    AGENT = "agent"
+    MCP = "mcp"
+
+
+def _checked(adapter: TypeAdapter[str], value: str, what: str) -> str:
+    """Refuse a bad argument before anything is written.
+
+    Writing first and validating afterwards turned a mistyped id into a half-written directory and
+    a runtime exit code, when it is a usage error.
+    """
+    try:
+        return adapter.validate_python(value)
+    except ValidationError:
+        typer.secho(f"{what}: {value!r} is not valid.", err=True, fg=typer.colors.RED)
+        raise typer.Exit(ExitCode.USAGE) from None
+
 
 _MANIFEST = """\
 lakmus: "{format_version}"
@@ -109,8 +131,8 @@ def init(
         typer.Option("--dir", help="Where to write it. Defaults to a path matching the id."),
     ] = None,
     kind: Annotated[
-        str, typer.Option("--kind", help="What is under test: model, agent or mcp.")
-    ] = "model",
+        TargetKind, typer.Option("--kind", help="What is under test.")
+    ] = TargetKind.MODEL,
     licence: Annotated[
         str,
         typer.Option("--license", help=f"SPDX identifier. One of: {', '.join(ALLOWED_LICENCES)}."),
@@ -121,13 +143,24 @@ def init(
     title: Annotated[str | None, typer.Option("--title", help="Human-readable title.")] = None,
 ) -> None:
     """Scaffold a suite directory that validates."""
+    suite_id = _checked(TypeAdapter(SuiteId), suite_id, "ID")
+    licence = _checked(TypeAdapter(SpdxId), licence, "--license")
+    language = _checked(TypeAdapter(LanguageTag), language, "--language")
+    if licence not in ALLOWED_LICENCES and not licence.startswith("LicenseRef-"):
+        typer.secho(
+            f"--license: {licence!r} is not in {', '.join(ALLOWED_LICENCES)}.",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(ExitCode.USAGE)
+
     root = directory if directory is not None else Path(*suite_id.split("/"))
     if root.exists() and any(root.iterdir()):
         typer.secho(f"{root} is not empty.", err=True, fg=typer.colors.RED)
         raise typer.Exit(ExitCode.USAGE)
 
     (root / "cases").mkdir(parents=True, exist_ok=True)
-    if kind == "model":
+    if kind is TargetKind.MODEL:
         (root / "prompts").mkdir(exist_ok=True)
         (root / "prompts" / "prompt.j2").write_text(_PROMPT, encoding="utf-8")
 
@@ -139,8 +172,8 @@ def init(
             title=json.dumps(resolved_title, ensure_ascii=False),
             language=language,
             licence=licence,
-            kind=kind,
-            target_input=_TARGET_INPUT if kind == "model" else "",
+            kind=kind.value,
+            target_input=_TARGET_INPUT if kind is TargetKind.MODEL else "",
         ),
         encoding="utf-8",
     )

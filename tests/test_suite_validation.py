@@ -91,6 +91,20 @@ def _case_missing_group_field(root: Path) -> None:
     _append_case(root, json.dumps({"id": "p-0003"}))
 
 
+def _no_cases(root: Path) -> None:
+    (root / CASES_FILE).write_text("\n\n", encoding="utf-8")
+
+
+def _cases_are_not_utf8(root: Path) -> None:
+    (root / CASES_FILE).write_bytes(
+        '{"id": "p-0001", "variable": "\u00e9chantillon"}\n'.encode("latin-1")
+    )
+
+
+def _cases_source_is_a_directory(root: Path) -> None:
+    _edit_manifest(root, lambda manifest: manifest["cases"].update(source="cases"))
+
+
 def _scorer_that_will_not_import(root: Path) -> None:
     (root / SCORER_FILE).write_text(
         "import lakmus_dependency_that_does_not_exist\n", encoding="utf-8"
@@ -150,6 +164,7 @@ BREAKAGES = (
     Breakage(Code.CASE_WITHOUT_ID, _case_without_id),
     Breakage(Code.CASE_DUPLICATE_ID, _duplicate_case_id),
     Breakage(Code.CASE_MISSING_GROUP_FIELD, _case_missing_group_field),
+    Breakage(Code.CASES_EMPTY, _no_cases),
     Breakage(Code.SCORER_IMPORT_FAILED, _scorer_that_will_not_import, run_suite_code=True),
     Breakage(Code.SCORER_NOT_CALLABLE, _scorer_without_the_function, run_suite_code=True),
     Breakage(Code.METRIC_DUPLICATE_ID, _duplicate_metric_id),
@@ -176,6 +191,60 @@ def test_one_breakage_reports_exactly_one_code(breakage: Breakage, valid_suite: 
     breakage.apply(valid_suite)
 
     assert _codes(valid_suite, run_suite_code=breakage.run_suite_code) == {breakage.code}
+
+
+@pytest.mark.parametrize(
+    ("break_it", "expected"),
+    [
+        pytest.param(_cases_are_not_utf8, Code.CASE_NOT_JSON, id="cases-not-utf8"),
+        pytest.param(_cases_source_is_a_directory, Code.FILE_MISSING, id="cases-source-is-a-dir"),
+    ],
+)
+def test_a_file_that_cannot_be_read_is_a_finding_not_a_crash(
+    valid_suite: Path, break_it: Callable[[Path], None], expected: Code
+) -> None:
+    """A suite authored in a legacy editor must not take the tool down with it."""
+    break_it(valid_suite)
+
+    assert expected in _codes(valid_suite, run_suite_code=False)
+
+
+def test_a_gitattributes_that_is_not_utf8_is_a_warning_not_a_crash(valid_suite: Path) -> None:
+    (valid_suite / ".gitattributes").write_bytes("* -text\n# caf\u00e9\n".encode("latin-1"))
+
+    assert _codes(valid_suite, run_suite_code=False) == {Code.GITATTRIBUTES_MISSING}
+
+
+def test_scorer_findings_are_reported_alongside_other_errors(valid_suite: Path) -> None:
+    """The one-pass promise has to hold even when something else is already wrong.
+
+    Gating the scorer check on a fully valid suite meant an author fixed the licence, re-ran, and
+    only then learned the scorer would not import.
+    """
+    _forbidden_licence(valid_suite)
+    _scorer_that_will_not_import(valid_suite)
+
+    assert _codes(valid_suite, run_suite_code=True) == {
+        Code.LICENCE_NOT_ALLOWED,
+        Code.SCORER_IMPORT_FAILED,
+    }
+
+
+def test_suite_code_behind_a_symlink_is_never_imported(valid_suite: Path, tmp_path: Path) -> None:
+    """Consent to import a suite's scorers is not consent to run whatever a link points at."""
+    marker = tmp_path / "executed"
+    planted = tmp_path / "planted.py"
+    planted.write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')\n", encoding="utf-8"
+    )
+    scorer = valid_suite / "scorers" / "pair_gap.py"
+    scorer.unlink()
+    scorer.symlink_to(planted)
+
+    codes = _codes(valid_suite, run_suite_code=True)
+
+    assert not marker.exists()
+    assert Code.PATH_ESCAPES_SUITE in codes
 
 
 def test_a_symlink_is_refused(valid_suite: Path) -> None:
@@ -211,3 +280,31 @@ def test_an_unknown_field_suggests_the_field_it_resembles(valid_suite: Path) -> 
     findings = validate(valid_suite)
 
     assert 'Did you mean "thresholds"?' in findings[0].message
+
+
+def test_consent_is_asked_with_the_modules_it_would_import(valid_suite: Path) -> None:
+    asked: list[tuple[str, ...]] = []
+
+    def refuse(modules: tuple[str, ...]) -> bool:
+        asked.append(modules)
+        return False
+
+    assert validate(valid_suite, run_suite_code=refuse) == []
+    assert asked == [(SCORER_FILE,)]
+
+
+def test_consent_is_not_asked_when_the_suite_has_no_code_of_its_own(valid_suite: Path) -> None:
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"] = [{"id": "score_gap", "scorer": "builtin:pair_gap"}]
+        manifest["thresholds"] = {"score_gap": {"max": 0.05}}
+
+    _edit_manifest(valid_suite, change)
+    (valid_suite / SCORER_FILE).unlink()
+    asked: list[tuple[str, ...]] = []
+
+    def refuse(modules: tuple[str, ...]) -> bool:
+        asked.append(modules)
+        return False
+
+    assert validate(valid_suite, run_suite_code=refuse) == []
+    assert asked == []

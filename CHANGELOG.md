@@ -25,7 +25,9 @@ specification and in each run file. Changes to either are called out here under
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schema/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and
-  is therefore the comparability key, and `content_sha256` for the whole directory.
+  is therefore the comparability key, and `content_sha256` for the whole directory. Relative
+  paths are normalised to NFC so that an accented filename digests the same on any
+  filesystem, and a golden-vector test pins the algorithm.
 - Repository baseline: licence, contribution, conduct and security policies, issue and pull request
   templates, dependency updates, and continuous integration on Python 3.11 to 3.13.
 

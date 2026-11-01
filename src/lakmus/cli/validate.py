@@ -7,34 +7,52 @@ from typing import Annotated
 import typer
 
 from lakmus.errors import ExitCode, Finding
-from lakmus.suite.loader import inspect
-from lakmus.suite.models import Manifest, SuiteScorer, parse_scorer_ref
+from lakmus.suite.loader import SuiteCodeConsent
+from lakmus.suite.loader import validate as validate_suite
 
 
-def _uses_suite_code(manifest: Manifest) -> bool:
-    return any(
-        isinstance(parse_scorer_ref(metric.scorer), SuiteScorer) for metric in manifest.metrics
-    )
+def _notice(message: str) -> None:
+    typer.secho(message, err=True, fg=typer.colors.YELLOW)
 
 
-def _confirm_running_suite_code(module_count: int) -> bool:
-    """Ask before importing Python written by whoever wrote the suite.
+def _skipped(modules: tuple[str, ...], reason: str) -> None:
+    listed = ", ".join(modules)
+    _notice(f"Not checking {len(modules)} scorer module(s) ({listed}): {reason}")
 
-    Without a terminal the answer is no: a CI job that did not pass `--yes` must not hang, and
-    must not silently execute a stranger's code either.
+
+def _consent(*, yes: bool, no_code: bool) -> SuiteCodeConsent:
+    """Decide, once, whether a suite's own Python may be imported.
+
+    The decision is handed to the loader rather than taken before it, so that the question is
+    asked only when there is something to import and the answer names the real modules.
     """
-    if not sys.stdin.isatty():
-        typer.secho(
-            f"Not checking {module_count} suite scorer module(s): importing them runs the "
-            "suite author's code. Pass --yes to allow it, or --no-code to say so explicitly.",
-            err=True,
-            fg=typer.colors.YELLOW,
+    if no_code:
+
+        def refuse(modules: tuple[str, ...]) -> bool:
+            _skipped(modules, "--no-code was given.")
+            return False
+
+        return refuse
+
+    if yes:
+        return True
+
+    def ask(modules: tuple[str, ...]) -> bool:
+        if not sys.stdin.isatty():
+            _skipped(
+                modules,
+                "importing them runs the suite author's code and there is no terminal to ask at. "
+                "Pass --yes to allow it, or --no-code to say so explicitly.",
+            )
+            return False
+        listed = ", ".join(modules)
+        return typer.confirm(
+            f"Import {len(modules)} scorer module(s) from this suite ({listed})? "
+            "This runs its author's code",
+            default=False,
         )
-        return False
-    return typer.confirm(
-        f"Import {module_count} scorer module(s) from this suite? This runs its author's code",
-        default=False,
-    )
+
+    return ask
 
 
 def validate(
@@ -52,17 +70,7 @@ def validate(
         typer.secho("--yes and --no-code contradict each other.", err=True, fg=typer.colors.RED)
         raise typer.Exit(ExitCode.USAGE)
 
-    findings, suite = inspect(path, run_suite_code=False)
-
-    if suite is not None and not no_code and _uses_suite_code(suite.manifest):
-        modules = {
-            parsed.module
-            for metric in suite.manifest.metrics
-            if isinstance(parsed := parse_scorer_ref(metric.scorer), SuiteScorer)
-        }
-        if yes or _confirm_running_suite_code(len(modules)):
-            findings, suite = inspect(path, run_suite_code=True)
-
+    findings = validate_suite(path, run_suite_code=_consent(yes=yes, no_code=no_code))
     _report(path, findings)
     errors = sum(1 for finding in findings if finding.severity == "error")
     raise typer.Exit(ExitCode.USAGE if errors else ExitCode.SUCCESS)

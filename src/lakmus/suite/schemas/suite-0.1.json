@@ -72,7 +72,7 @@
     },
     "OutputSpec": {
       "additionalProperties": false,
-      "description": "What the target is expected to return.\n\n`schema` is a flat shorthand, not JSON Schema: every declared field is required, there is no\nnesting and no enums. The loader compiles it to JSON Schema, and the compiled form is what a\nrun file carries, so a consumer never has to learn this notation.",
+      "description": "What the target is expected to return.\n\n`schema` is a flat shorthand, not JSON Schema: every declared field is required, there is no\nnesting and no enums. Compiling it to JSON Schema, so that a run file carries a form no\nconsumer has to learn, belongs to the milestone that defines the run file.",
       "properties": {
         "schema": {
           "anyOf": [
@@ -237,7 +237,7 @@
       "type": "string"
     },
     "language": {
-      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+      "pattern": "^(?:[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*|x(?:-[A-Za-z0-9]{1,8})+)$",
       "title": "Language",
       "type": "string"
     },

@@ -9,6 +9,9 @@ Several checks that could be model validators live here instead — the licence 
 `target.kind = model` needing `target.input`, a threshold needing a bound. Pydantic would report
 them all as one generic value error, and the point of the code table is that each rejection names
 its own rule.
+
+A suite is untrusted input. Its Python is imported only when the caller grants it, and only for a
+module that is a real file inside the suite directory.
 """
 
 import difflib
@@ -16,9 +19,11 @@ import hashlib
 import importlib.util
 import json
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, TypeAlias
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -32,11 +37,16 @@ from lakmus.suite.models import (
     BuiltinScorer,
     Manifest,
     SuiteScorer,
+    declared_paths,
     parse_scorer_ref,
 )
 
 MANIFEST_FILENAME = "lakmus.yaml"
 GITATTRIBUTES_LINE = "* -text"
+
+SuiteCodeConsent: TypeAlias = bool | Callable[[tuple[str, ...]], bool]
+"""Whether to import a suite's Python. A callable is asked only when there is something to import,
+and is given the module paths, so that a caller can prompt with the real list."""
 
 _LICENCE_REF_PREFIX = "LicenseRef-"
 
@@ -57,20 +67,22 @@ class Suite:
     case_ids: tuple[str, ...]
 
 
-def load(root: Path, *, run_suite_code: bool = False) -> Suite:
+def load(root: Path, *, run_suite_code: SuiteCodeConsent = False) -> Suite:
     """Validate a suite and return it. Raises `SuiteInvalid` carrying every finding."""
     findings, suite = inspect(root, run_suite_code=run_suite_code)
-    if suite is None or any(finding.severity == "error" for finding in findings):
+    if suite is None:
         raise SuiteInvalid(findings)
     return suite
 
 
-def validate(root: Path, *, run_suite_code: bool = False) -> list[Finding]:
-    """Every finding for a suite, worst first. An empty list means the suite is valid."""
+def validate(root: Path, *, run_suite_code: SuiteCodeConsent = False) -> list[Finding]:
+    """Every finding for a suite. No finding of severity `error` means the suite is valid."""
     return inspect(root, run_suite_code=run_suite_code)[0]
 
 
-def inspect(root: Path, *, run_suite_code: bool = False) -> tuple[list[Finding], Suite | None]:
+def inspect(
+    root: Path, *, run_suite_code: SuiteCodeConsent = False
+) -> tuple[list[Finding], Suite | None]:
     """Run every stage that can run. The suite is returned only when nothing is wrong."""
     findings: list[Finding] = []
     manifest_path = root / MANIFEST_FILENAME
@@ -96,11 +108,14 @@ def inspect(root: Path, *, run_suite_code: bool = False) -> tuple[list[Finding],
     findings += _check_licence(manifest)
     findings += _check_target(manifest)
     findings += _check_metrics(manifest)
-    findings += _check_paths(root, manifest)
+    path_findings = _check_paths(root, manifest)
+    findings += path_findings
     findings += _check_gitattributes(root)
 
     case_ids = _check_cases(root, manifest, findings)
-    findings += _check_scorers(root, manifest, run_suite_code=run_suite_code)
+    findings += _check_scorers(
+        root, manifest, consent=run_suite_code, rejected=_rejected_paths(path_findings)
+    )
 
     if any(finding.severity == "error" for finding in findings):
         return findings, None
@@ -159,13 +174,12 @@ def _finding_for(error: ErrorDetails, raw: dict[str, Any]) -> Finding:
         )
 
     code = _PYDANTIC_CODES.get(kind, Code.MANIFEST_INVALID_VALUE)
-    message = str(error["msg"])
     if code is Code.MANIFEST_UNKNOWN_FIELD:
         message = f'unknown field "{error["loc"][-1]}".{_suggestion(error["loc"])}'
     elif code is Code.MANIFEST_MISSING_FIELD:
         message = f'"{location}" is required.'
     else:
-        message = f"{message}, got {error['input']!r}."
+        message = f"{error['msg']}, got {error['input']!r}."
     return Finding(code=code, location=f"{MANIFEST_FILENAME}: {location}", message=message)
 
 
@@ -188,9 +202,7 @@ def _suggestion(loc: tuple[int | str, ...]) -> str:
 
 
 def _check_licence(manifest: Manifest) -> list[Finding]:
-    if manifest.license in ALLOWED_LICENCES:
-        return []
-    if manifest.license.startswith(_LICENCE_REF_PREFIX):
+    if manifest.license in ALLOWED_LICENCES or manifest.license.startswith(_LICENCE_REF_PREFIX):
         return []
     allowed = ", ".join(ALLOWED_LICENCES)
     return [
@@ -254,29 +266,19 @@ def _check_metrics(manifest: Manifest) -> list[Finding]:
     return findings
 
 
-def _declared_paths(manifest: Manifest) -> list[tuple[str, str]]:
-    declared = [("cases.source", manifest.cases.source)]
-    if manifest.target.input is not None:
-        declared.append(("target.input", manifest.target.input))
-    for metric in manifest.metrics:
-        parsed = parse_scorer_ref(metric.scorer)
-        if isinstance(parsed, SuiteScorer):
-            declared.append((f"metrics[{metric.id}].scorer", parsed.module))
-    return declared
-
-
 def _check_paths(root: Path, manifest: Manifest) -> list[Finding]:
     findings: list[Finding] = []
     resolved_root = root.resolve()
 
-    for field, relative in _declared_paths(manifest):
+    for field, relative in declared_paths(manifest):
         target = root / relative
-        if not target.exists():
+        if not target.is_file():
+            what = "is a directory" if target.is_dir() else "does not exist"
             findings.append(
                 Finding(
                     code=Code.FILE_MISSING,
                     location=f"{MANIFEST_FILENAME}: {field}",
-                    message=f'"{relative}" does not exist.',
+                    message=f'"{relative}" {what}; a file is required.',
                 )
             )
             continue
@@ -303,9 +305,24 @@ def _check_paths(root: Path, manifest: Manifest) -> list[Finding]:
     return findings
 
 
+def _rejected_paths(path_findings: Sequence[Finding]) -> frozenset[str]:
+    """Locations a path check already refused, so that no later stage touches those files."""
+    return frozenset(
+        finding.location.split(": ", 1)[-1]
+        for finding in path_findings
+        if finding.code in {Code.FILE_MISSING, Code.PATH_ESCAPES_SUITE}
+    )
+
+
 def _check_gitattributes(root: Path) -> list[Finding]:
     path = root / ".gitattributes"
-    if path.is_file() and GITATTRIBUTES_LINE in path.read_text(encoding="utf-8").split("\n"):
+    present = False
+    if path.is_file():
+        try:
+            present = GITATTRIBUTES_LINE in path.read_text(encoding="utf-8").split("\n")
+        except UnicodeDecodeError:
+            present = False
+    if present:
         return []
     return [
         Finding(
@@ -328,108 +345,158 @@ def _check_cases(root: Path, manifest: Manifest, findings: list[Finding]) -> tup
     grouped_by = sorted({field for metric in manifest.metrics for field in metric.group_by})
     first_seen: dict[str, int] = {}
 
-    with source.open(encoding="utf-8") as handle:
-        for number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            location = f"{manifest.cases.source}:{number}"
-            try:
-                case = json.loads(line)
-            except json.JSONDecodeError as exc:
-                findings.append(
-                    Finding(
-                        code=Code.CASE_NOT_JSON,
-                        location=location,
-                        message=f"not valid JSON: {_one_line(exc)}",
-                    )
-                )
-                continue
-            if not isinstance(case, dict):
-                findings.append(
-                    Finding(
-                        code=Code.CASE_NOT_JSON,
-                        location=location,
-                        message="each line must be a JSON object.",
-                    )
-                )
-                continue
+    try:
+        lines = source.read_text(encoding="utf-8").split("\n")
+    except UnicodeDecodeError as exc:
+        findings.append(
+            Finding(
+                code=Code.CASE_NOT_JSON,
+                location=manifest.cases.source,
+                message=f"not valid UTF-8: {_one_line(exc)}",
+            )
+        )
+        return ()
 
-            identifier = case.get("id")
-            if not isinstance(identifier, str) or not identifier:
-                findings.append(
-                    Finding(
-                        code=Code.CASE_WITHOUT_ID,
-                        location=location,
-                        message='case is missing a non-empty string "id".',
-                    )
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        location = f"{manifest.cases.source}:{number}"
+        try:
+            case = json.loads(line)
+        except json.JSONDecodeError as exc:
+            findings.append(
+                Finding(
+                    code=Code.CASE_NOT_JSON,
+                    location=location,
+                    message=f"not valid JSON: {_one_line(exc)}",
                 )
-                continue
-            if identifier in first_seen:
-                findings.append(
-                    Finding(
-                        code=Code.CASE_DUPLICATE_ID,
-                        location=location,
-                        message=(
-                            f'case id "{identifier}" was already used at line '
-                            f"{first_seen[identifier]}."
-                        ),
-                    )
+            )
+            continue
+        if not isinstance(case, dict):
+            findings.append(
+                Finding(
+                    code=Code.CASE_NOT_JSON,
+                    location=location,
+                    message="each line must be a JSON object.",
                 )
-                continue
-            first_seen[identifier] = number
+            )
+            continue
 
-            for field in grouped_by:
-                if field not in case:
-                    metric = next(m.id for m in manifest.metrics if field in m.group_by)
-                    findings.append(
-                        Finding(
-                            code=Code.CASE_MISSING_GROUP_FIELD,
-                            location=location,
-                            message=(
-                                f'case has no field "{field}", which metric "{metric}" groups by.'
-                            ),
-                        )
+        identifier = case.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            findings.append(
+                Finding(
+                    code=Code.CASE_WITHOUT_ID,
+                    location=location,
+                    message='case is missing a non-empty string "id".',
+                )
+            )
+            continue
+        if identifier in first_seen:
+            findings.append(
+                Finding(
+                    code=Code.CASE_DUPLICATE_ID,
+                    location=location,
+                    message=(
+                        f'case id "{identifier}" was already used at line {first_seen[identifier]}.'
+                    ),
+                )
+            )
+            continue
+        first_seen[identifier] = number
+
+        for field in grouped_by:
+            if field not in case:
+                metric = next(m.id for m in manifest.metrics if field in m.group_by)
+                findings.append(
+                    Finding(
+                        code=Code.CASE_MISSING_GROUP_FIELD,
+                        location=location,
+                        message=f'case has no field "{field}", which metric "{metric}" groups by.',
                     )
+                )
+
+    if not first_seen:
+        findings.append(
+            Finding(
+                code=Code.CASES_EMPTY,
+                location=manifest.cases.source,
+                message="a suite needs at least one case; this file holds none.",
+            )
+        )
 
     return tuple(first_seen)
 
 
-def _check_scorers(root: Path, manifest: Manifest, *, run_suite_code: bool) -> list[Finding]:
-    """Import every suite scorer module and look up its function.
+def _scorer_modules(
+    root: Path, manifest: Manifest, rejected: frozenset[str]
+) -> list[tuple[str, Path]]:
+    """Suite scorer modules that are safe to import: a real file, inside the suite, not refused.
 
-    This runs code the suite author wrote, so it only happens when the caller said so. Built-in
-    scorer names are not checked here: the registry is part of the scorers milestone, and
-    rejecting every name against an empty registry would be worse than not checking.
+    A module whose path already drew a finding is left alone. Executing code reached through a
+    symbolic link that leaves the suite would be exactly the escape the finding was reporting.
     """
-    if not run_suite_code:
-        return []
-
-    findings: list[Finding] = []
+    resolved_root = root.resolve()
+    modules: dict[str, Path] = {}
     for metric in manifest.metrics:
         parsed = parse_scorer_ref(metric.scorer)
-        if isinstance(parsed, BuiltinScorer):
+        if isinstance(parsed, BuiltinScorer) or parsed.module in rejected:
             continue
-        module_path = root / parsed.module
-        if not module_path.is_file():
+        path = root / parsed.module
+        if path.is_symlink() or not path.is_file():
             continue
-        module = _import_module(module_path, findings)
+        if not path.resolve().is_relative_to(resolved_root):
+            continue
+        modules[parsed.module] = path
+    return sorted(modules.items())
+
+
+def _granted(consent: SuiteCodeConsent, modules: tuple[str, ...]) -> bool:
+    return consent if isinstance(consent, bool) else consent(modules)
+
+
+def _check_scorers(
+    root: Path,
+    manifest: Manifest,
+    *,
+    consent: SuiteCodeConsent,
+    rejected: frozenset[str] = frozenset(),
+) -> list[Finding]:
+    """Import every suite scorer module and look up its function.
+
+    Built-in scorer names are not checked here: the registry is part of the scorers milestone, and
+    rejecting every name against an empty registry would be worse than not checking.
+    """
+    modules = _scorer_modules(root, manifest, rejected)
+    if not modules or not _granted(consent, tuple(name for name, _ in modules)):
+        return []
+
+    wanted: dict[str, set[str]] = {}
+    for metric in manifest.metrics:
+        parsed = parse_scorer_ref(metric.scorer)
+        if isinstance(parsed, SuiteScorer):
+            wanted.setdefault(parsed.module, set()).add(parsed.function)
+
+    findings: list[Finding] = []
+    for relative, path in modules:
+        module = _import_module(path, relative, findings)
         if module is None:
             continue
-        function = getattr(module, parsed.function, None)
-        if not callable(function):
-            findings.append(
-                Finding(
-                    code=Code.SCORER_NOT_CALLABLE,
-                    location=parsed.module,
-                    message=f'"{parsed.function}" is missing or is not callable.',
+        for function_name in sorted(wanted.get(relative, set())):
+            if not callable(getattr(module, function_name, None)):
+                findings.append(
+                    Finding(
+                        code=Code.SCORER_NOT_CALLABLE,
+                        location=relative,
+                        message=f'"{function_name}" is missing or is not callable.',
+                    )
                 )
-            )
     return findings
 
 
-def _import_module(path: Path, findings: list[Finding]) -> object | None:
-    # A digest, not hash(): PYTHONHASHSEED makes hash() vary between processes, and this
-    # project injects randomness rather than inheriting it.
+def _import_module(path: Path, relative: str, findings: list[Finding]) -> ModuleType | None:
+    # A digest, not hash(): PYTHONHASHSEED makes hash() vary between processes, and this project
+    # injects randomness rather than inheriting it.
     fingerprint = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:12]
     name = f"lakmus_suite_scorer_{path.stem}_{fingerprint}"
     spec = importlib.util.spec_from_file_location(name, path)
@@ -437,7 +504,7 @@ def _import_module(path: Path, findings: list[Finding]) -> object | None:
         findings.append(
             Finding(
                 code=Code.SCORER_IMPORT_FAILED,
-                location=str(path.name),
+                location=relative,
                 message="cannot be loaded as a Python module.",
             )
         )
@@ -450,13 +517,13 @@ def _import_module(path: Path, findings: list[Finding]) -> object | None:
         del sys.modules[name]
         raise
     except BaseException as exc:
-        # Suite code may raise anything at import, SystemExit included; it must not be
-        # able to end `lakmus validate`.
+        # Suite code may raise anything at import, SystemExit included; it must not be able to
+        # end `lakmus validate`.
         del sys.modules[name]
         findings.append(
             Finding(
                 code=Code.SCORER_IMPORT_FAILED,
-                location=str(path.name),
+                location=relative,
                 message=f"import failed: {type(exc).__name__}: {_one_line(exc)}",
             )
         )

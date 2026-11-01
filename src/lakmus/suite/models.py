@@ -44,7 +44,12 @@ SemVer = Annotated[
 ]
 Slug = Annotated[str, StringConstraints(pattern=rf"^{_KEBAB}$")]
 MetricId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:[_-][a-z0-9]+)*$")]
-LanguageTag = Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")]
+LanguageTag = Annotated[
+    str,
+    StringConstraints(pattern=r"^(?:[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*|x(?:-[A-Za-z0-9]{1,8})+)$"),
+]
+"""BCP-47. Single-character subtags are allowed because extensions use them
+(`fr-FR-u-co-phonebk`), as does the private-use form (`x-internal`)."""
 SpdxId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9.+-]*$")]
 """Syntax only. Membership of ALLOWED_LICENCES is checked by the loader, so that a refused licence
 reports LKM-601 rather than a generic type error."""
@@ -98,8 +103,8 @@ class OutputSpec(_Strict):
     """What the target is expected to return.
 
     `schema` is a flat shorthand, not JSON Schema: every declared field is required, there is no
-    nesting and no enums. The loader compiles it to JSON Schema, and the compiled form is what a
-    run file carries, so a consumer never has to learn this notation.
+    nesting and no enums. Compiling it to JSON Schema, so that a run file carries a form no
+    consumer has to learn, belongs to the milestone that defines the run file.
     """
 
     type: Literal["text", "json"] = "text"
@@ -169,3 +174,20 @@ class Manifest(_Strict):
     @property
     def name(self) -> str:
         return self.id.split("/", 1)[1]
+
+
+def declared_paths(manifest: Manifest) -> list[tuple[str, str]]:
+    """Every file the manifest names, as (field, relative path).
+
+    One list, used both to check that the files exist and to decide what the comparability digest
+    covers. Two lists would be free to disagree, and a prompt missing from the digest is the kind
+    of disagreement nobody notices until two results are compared that should not have been.
+    """
+    declared = [("cases.source", manifest.cases.source)]
+    if manifest.target.input is not None:
+        declared.append(("target.input", manifest.target.input))
+    for metric in manifest.metrics:
+        parsed = parse_scorer_ref(metric.scorer)
+        if isinstance(parsed, SuiteScorer):
+            declared.append((f"metrics[{metric.id}].scorer", parsed.module))
+    return declared

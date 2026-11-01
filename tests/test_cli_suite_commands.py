@@ -129,3 +129,46 @@ def test_init_writes_no_prompt_for_a_target_that_takes_none(tmp_path: Path, kind
     assert not (root / "prompts").exists()
     manifest = yaml.safe_load((root / MANIFEST_FILENAME).read_text(encoding="utf-8"))
     assert "input" not in manifest["target"]
+
+
+def test_no_code_says_what_it_skipped(valid_suite: Path) -> None:
+    """A CI log that reads `valid.` must not hide that the scorers were never imported."""
+    result = runner.invoke(app, ["validate", str(valid_suite), "--no-code"])
+
+    assert result.exit_code == ExitCode.SUCCESS
+    output = _output(result)
+    assert "Not checking" in output
+    assert "scorers/pair_gap.py" in output
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        pytest.param(["RH/Tri CV"], id="id-is-not-kebab-case"),
+        pytest.param(["../escaped/suite"], id="id-tries-to-leave-the-directory"),
+        pytest.param(["rh/tri-cv", "--kind", "banana"], id="unknown-target-kind"),
+        pytest.param(["rh/tri-cv", "--license", "GPL-3.0-only"], id="licence-not-allowed"),
+        pytest.param(["rh/tri-cv", "--language", "français"], id="language-is-not-bcp47"),
+    ],
+)
+def test_init_refuses_a_bad_argument_before_writing_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str]
+) -> None:
+    """A mistyped argument is a usage error, not a half-written directory and exit code 3."""
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["init", *arguments, "--dir", "out"])
+
+    assert result.exit_code == ExitCode.USAGE
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_init_accepts_a_private_licence_reference(tmp_path: Path) -> None:
+    root = tmp_path / "private"
+
+    result = runner.invoke(
+        app, ["init", "rh/interne", "--dir", str(root), "--license", "LicenseRef-Acme-Internal"]
+    )
+
+    assert result.exit_code == ExitCode.SUCCESS
+    assert validate(root, run_suite_code=False) == []

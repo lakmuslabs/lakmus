@@ -5,6 +5,10 @@ fails if the committed file differs: the hub and any other implementation valida
 published copy, so the copy and the models must not drift.
 
 Regenerate with `make schema`.
+
+The generated files live in `schemas/` rather than `schema/`: a data directory sharing a
+name with this module resolves only by the rule that a file module beats a namespace
+package, which is a trap for packaging tools.
 """
 
 import json
@@ -13,7 +17,7 @@ from typing import Any
 
 from lakmus.suite.models import FORMAT_VERSION, Manifest
 
-SCHEMA_PATH = Path(__file__).parent / "schema" / f"suite-{FORMAT_VERSION}.json"
+SCHEMA_PATH = Path(__file__).parent / "schemas" / f"suite-{FORMAT_VERSION}.json"
 SCHEMA_ID = f"https://lakmuslabs.github.io/lakmus/schemas/{FORMAT_VERSION}/suite.json"
 METASCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
