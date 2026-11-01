@@ -51,6 +51,16 @@ specification and in each run file. Changes to either are called out here under
   uses them: a JSON value, a header, an assignment, or a key recognisable by its prefix. A
   message about token limits survives intact. A redirect, and a 200 carrying an error object,
   end a run instead of being recorded against every case.
+- The `@scorer` decorator and seven built-in scorers: `exact`, `regex`, `json_schema`,
+  `json_field_match`, `precision_recall_f1`, `pair_gap` and `pair_flip`. A case a scorer cannot
+  score has no score and is counted as an error, rather than scored at the worst value — which
+  on a lower-is-better metric would let a target that answered nothing pass the threshold.
+- `metrics[].with` in the suite format: a metric configures its scorer there, and the accepted
+  names are the scorer's keyword-only parameters, so a misspelled option is refused by
+  `lakmus validate`. Options live inside the comparability digest, because changing a regex is
+  changing the measurement.
+- Normalisation steps `trim`, `collapse_space`, `nfc` and `lower`, applied in the order given.
+  There is no accent-stripping step: in French `é` and `e` are different answers.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

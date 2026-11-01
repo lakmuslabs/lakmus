@@ -19,11 +19,11 @@ import hashlib
 import importlib.util
 import json
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -31,11 +31,16 @@ from pydantic_core import ErrorDetails
 
 from lakmus.errors import Code, Finding, SuiteInvalid
 from lakmus.suite import hashing
+
+if TYPE_CHECKING:  # pragma: no cover - a type, injected at runtime
+    from lakmus.scorers.base import ScorerSpec
+
 from lakmus.suite.models import (
     ALLOWED_LICENCES,
     FORMAT_VERSION,
     BuiltinScorer,
     Manifest,
+    MetricSpec,
     SuiteScorer,
     declared_paths,
     parse_scorer_ref,
@@ -67,23 +72,41 @@ class Suite:
     case_ids: tuple[str, ...]
 
 
-def load(root: Path, *, run_suite_code: SuiteCodeConsent = False) -> Suite:
+def load(
+    root: Path,
+    *,
+    run_suite_code: SuiteCodeConsent = False,
+    scorers: "Mapping[str, ScorerSpec] | None" = None,
+) -> Suite:
     """Validate a suite and return it. Raises `SuiteInvalid` carrying every finding."""
-    findings, suite = inspect(root, run_suite_code=run_suite_code)
+    findings, suite = inspect(root, run_suite_code=run_suite_code, scorers=scorers)
     if suite is None:
         raise SuiteInvalid(findings)
     return suite
 
 
-def validate(root: Path, *, run_suite_code: SuiteCodeConsent = False) -> list[Finding]:
+def validate(
+    root: Path,
+    *,
+    run_suite_code: SuiteCodeConsent = False,
+    scorers: "Mapping[str, ScorerSpec] | None" = None,
+) -> list[Finding]:
     """Every finding for a suite. No finding of severity `error` means the suite is valid."""
-    return inspect(root, run_suite_code=run_suite_code)[0]
+    return inspect(root, run_suite_code=run_suite_code, scorers=scorers)[0]
 
 
 def inspect(
-    root: Path, *, run_suite_code: SuiteCodeConsent = False
+    root: Path,
+    *,
+    run_suite_code: SuiteCodeConsent = False,
+    scorers: "Mapping[str, ScorerSpec] | None" = None,
 ) -> tuple[list[Finding], Suite | None]:
-    """Run every stage that can run. The suite is returned only when nothing is wrong."""
+    """Run every stage that can run. The suite is returned only when nothing is wrong.
+
+    `scorers` is the built-in registry, injected rather than imported so that loading a suite does
+    not drag in the adapter stack. Without it the scorer checks are skipped, which is what a
+    caller that only wants the manifest wants.
+    """
     findings: list[Finding] = []
     manifest_path = root / MANIFEST_FILENAME
 
@@ -113,8 +136,13 @@ def inspect(
     findings += _check_gitattributes(root)
 
     case_ids = _check_cases(root, manifest, findings)
+    findings += _check_builtin_scorers(manifest, scorers)
     findings += _check_scorers(
-        root, manifest, consent=run_suite_code, rejected=_rejected_paths(path_findings)
+        root,
+        manifest,
+        consent=run_suite_code,
+        rejected=_rejected_paths(path_findings),
+        scorers=scorers,
     )
 
     if any(finding.severity == "error" for finding in findings):
@@ -455,18 +483,77 @@ def _granted(consent: SuiteCodeConsent, modules: tuple[str, ...]) -> bool:
     return consent if isinstance(consent, bool) else consent(modules)
 
 
+def _check_builtin_scorers(
+    manifest: Manifest, scorers: "Mapping[str, ScorerSpec] | None"
+) -> list[Finding]:
+    """Check every `builtin:` reference and its options, without importing anything."""
+    if scorers is None:
+        return []
+
+    findings: list[Finding] = []
+    for metric in manifest.metrics:
+        parsed = parse_scorer_ref(metric.scorer)
+        if not isinstance(parsed, BuiltinScorer):
+            continue
+        spec = scorers.get(parsed.name)
+        if spec is None:
+            close = difflib.get_close_matches(parsed.name, sorted(scorers), n=1, cutoff=0.6)
+            hint = f' Did you mean "{close[0]}"?' if close else ""
+            findings.append(
+                Finding(
+                    code=Code.SCORER_UNKNOWN_BUILTIN,
+                    location=f"{MANIFEST_FILENAME}: metrics[{metric.id}].scorer",
+                    message=(
+                        f'there is no built-in scorer named "{parsed.name}".{hint} '
+                        f"Known: {', '.join(sorted(scorers))}."
+                    ),
+                )
+            )
+            continue
+        findings += _check_options(metric.id, spec, metric.options)
+    return findings
+
+
+def _check_options(
+    metric_id: str, spec: "ScorerSpec", options: Mapping[str, object]
+) -> list[Finding]:
+    """Compare a metric's `with` block against the scorer's keyword-only parameters."""
+    findings: list[Finding] = []
+    location = f"{MANIFEST_FILENAME}: metrics[{metric_id}].with"
+
+    for name in sorted(set(options) - spec.options):
+        close = difflib.get_close_matches(name, sorted(spec.options), n=1, cutoff=0.6)
+        hint = f' Did you mean "{close[0]}"?' if close else ""
+        accepted = ", ".join(sorted(spec.options)) or "none"
+        findings.append(
+            Finding(
+                code=Code.SCORER_OPTION_REFUSED,
+                location=location,
+                message=f'"{spec.name}" accepts no option "{name}".{hint} Accepted: {accepted}.',
+            )
+        )
+
+    missing = sorted(spec.required_options - set(options))
+    if missing:
+        findings.append(
+            Finding(
+                code=Code.SCORER_OPTION_REFUSED,
+                location=location,
+                message=f'"{spec.name}" requires {", ".join(missing)}.',
+            )
+        )
+    return findings
+
+
 def _check_scorers(
     root: Path,
     manifest: Manifest,
     *,
     consent: SuiteCodeConsent,
     rejected: frozenset[str] = frozenset(),
+    scorers: "Mapping[str, ScorerSpec] | None" = None,
 ) -> list[Finding]:
-    """Import every suite scorer module and look up its function.
-
-    Built-in scorer names are not checked here: the registry is part of the scorers milestone, and
-    rejecting every name against an empty registry would be worse than not checking.
-    """
+    """Import every suite scorer module, and check the function it names carries `@scorer`."""
     modules = _scorer_modules(root, manifest, rejected)
     if not modules or not _granted(consent, tuple(name for name, _ in modules)):
         return []
@@ -477,13 +564,20 @@ def _check_scorers(
         if isinstance(parsed, SuiteScorer):
             wanted.setdefault(parsed.module, set()).add(parsed.function)
 
+    by_module: dict[str, list[MetricSpec]] = {}
+    for metric in manifest.metrics:
+        parsed = parse_scorer_ref(metric.scorer)
+        if isinstance(parsed, SuiteScorer):
+            by_module.setdefault(parsed.module, []).append(metric)
+
     findings: list[Finding] = []
     for relative, path in modules:
         module = _import_module(path, relative, findings)
         if module is None:
             continue
         for function_name in sorted(wanted.get(relative, set())):
-            if not callable(getattr(module, function_name, None)):
+            function = getattr(module, function_name, None)
+            if not callable(function):
                 findings.append(
                     Finding(
                         code=Code.SCORER_NOT_CALLABLE,
@@ -491,7 +585,31 @@ def _check_scorers(
                         message=f'"{function_name}" is missing or is not callable.',
                     )
                 )
+                continue
+            spec = _spec_of(function)
+            if spec is None:
+                findings.append(
+                    Finding(
+                        code=Code.SCORER_NOT_CALLABLE,
+                        location=relative,
+                        message=(
+                            f'"{function_name}" must be decorated with @scorer. Without it there '
+                            f"is no direction, no arity and no option schema."
+                        ),
+                    )
+                )
+                continue
+            for metric in by_module.get(relative, []):
+                if parse_scorer_ref(metric.scorer) == SuiteScorer(relative, function_name):
+                    findings += _check_options(metric.id, spec, metric.options)
     return findings
+
+
+def _spec_of(function: object) -> "ScorerSpec | None":
+    """Read the spec `@scorer` attached, importing the scorers package only when needed."""
+    from lakmus.scorers.base import spec_of
+
+    return spec_of(function)
 
 
 def _import_module(path: Path, relative: str, findings: list[Finding]) -> ModuleType | None:

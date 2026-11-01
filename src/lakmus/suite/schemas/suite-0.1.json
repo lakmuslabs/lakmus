@@ -61,6 +61,45 @@
           "pattern": "^(?:builtin:[a-z0-9_]+|[^\\s:]+\\.py:[A-Za-z_][A-Za-z0-9_]*)$",
           "title": "Scorer",
           "type": "string"
+        },
+        "with": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "With",
+          "type": "object"
         }
       },
       "required": [

@@ -167,7 +167,7 @@ def _minimal_suite(root: Path) -> Path:
     return root
 
 
-GOLDEN_INPUTS_SHA256 = "001e7beee52e321180b75d52ae4facbd179d657322dd226d68713c108f4cebc1"
+GOLDEN_INPUTS_SHA256 = "083ca6180a9a98fb9dd2d1395d7db279795bcebd1c91250281fe6e174dc0410e"
 """Pinned on purpose. `inputs_sha256` is the cross-implementation comparability key, so this value
 may change only together with the algorithm name in `hashing.INPUTS_ALGORITHM`."""
 

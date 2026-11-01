@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from lakmus.errors import Code
+from lakmus.scorers import BUILTIN_SCORERS
 from lakmus.suite.loader import MANIFEST_FILENAME, validate
 
 CASES_FILE = "cases/pairs.jsonl"
@@ -115,9 +116,29 @@ def _scorer_without_the_function(root: Path) -> None:
     (root / SCORER_FILE).write_text("other_name = 1\n", encoding="utf-8")
 
 
+def _scorer_without_the_decorator(root: Path) -> None:
+    (root / SCORER_FILE).write_text(
+        "def mean_abs_gap(case, outputs, *, field='score'):\n    return 0.0\n", encoding="utf-8"
+    )
+
+
+def _unknown_builtin(root: Path) -> None:
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"][1]["scorer"] = "builtin:pair_flop"
+
+    _edit_manifest(root, change)
+
+
+def _unknown_scorer_option(root: Path) -> None:
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"][1]["with"] = {"feild": "decision"}
+
+    _edit_manifest(root, change)
+
+
 def _duplicate_metric_id(root: Path) -> None:
     def change(manifest: dict[str, Any]) -> None:
-        manifest["metrics"].append({"id": "score_gap", "scorer": "builtin:exact_match"})
+        manifest["metrics"].append({"id": "score_gap", "scorer": "builtin:pair_flip"})
 
     _edit_manifest(root, change)
 
@@ -167,6 +188,8 @@ BREAKAGES = (
     Breakage(Code.CASES_EMPTY, _no_cases),
     Breakage(Code.SCORER_IMPORT_FAILED, _scorer_that_will_not_import, run_suite_code=True),
     Breakage(Code.SCORER_NOT_CALLABLE, _scorer_without_the_function, run_suite_code=True),
+    Breakage(Code.SCORER_UNKNOWN_BUILTIN, _unknown_builtin),
+    Breakage(Code.SCORER_OPTION_REFUSED, _unknown_scorer_option),
     Breakage(Code.METRIC_DUPLICATE_ID, _duplicate_metric_id),
     Breakage(Code.THRESHOLD_UNKNOWN_METRIC, _threshold_on_unknown_metric),
     Breakage(Code.THRESHOLD_WITHOUT_BOUND, _threshold_without_bound),
@@ -179,7 +202,10 @@ COVERED_ELSEWHERE = frozenset({Code.PATH_ESCAPES_SUITE})
 
 
 def _codes(root: Path, *, run_suite_code: bool) -> set[Code]:
-    return {finding.code for finding in validate(root, run_suite_code=run_suite_code)}
+    return {
+        finding.code
+        for finding in validate(root, run_suite_code=run_suite_code, scorers=BUILTIN_SCORERS)
+    }
 
 
 def test_the_specification_example_validates(valid_suite: Path) -> None:
@@ -308,3 +334,51 @@ def test_consent_is_not_asked_when_the_suite_has_no_code_of_its_own(valid_suite:
 
     assert validate(valid_suite, run_suite_code=refuse) == []
     assert asked == []
+
+
+def test_a_suite_scorer_must_carry_the_decorator(valid_suite: Path) -> None:
+    """Without it there is no direction, no arity and no option schema to validate against."""
+    _scorer_without_the_decorator(valid_suite)
+
+    findings = validate(valid_suite, run_suite_code=True, scorers=BUILTIN_SCORERS)
+
+    assert {finding.code for finding in findings} == {Code.SCORER_NOT_CALLABLE}
+    assert "@scorer" in findings[0].message
+
+
+def test_an_unknown_built_in_suggests_the_one_it_resembles(valid_suite: Path) -> None:
+    _unknown_builtin(valid_suite)
+
+    findings = validate(valid_suite, scorers=BUILTIN_SCORERS)
+
+    assert 'Did you mean "pair_flip"?' in findings[0].message
+
+
+def test_an_unknown_option_suggests_the_one_it_resembles(valid_suite: Path) -> None:
+    _unknown_scorer_option(valid_suite)
+
+    findings = validate(valid_suite, scorers=BUILTIN_SCORERS)
+
+    assert 'Did you mean "field"?' in findings[0].message
+
+
+def test_a_missing_required_option_is_refused(valid_suite: Path) -> None:
+    """`regex` has no conventional pattern, so the suite has to give one."""
+
+    def change(manifest: dict[str, Any]) -> None:
+        manifest["metrics"][1] = {"id": "has_siret", "scorer": "builtin:regex"}
+        manifest["thresholds"] = {"score_gap": {"max": 0.05}}
+
+    _edit_manifest(valid_suite, change)
+
+    findings = validate(valid_suite, scorers=BUILTIN_SCORERS)
+
+    assert {finding.code for finding in findings} == {Code.SCORER_OPTION_REFUSED}
+    assert "requires pattern" in findings[0].message
+
+
+def test_without_a_registry_the_scorer_names_are_not_checked(valid_suite: Path) -> None:
+    """A caller that only wants the manifest should not drag in the adapter stack."""
+    _unknown_builtin(valid_suite)
+
+    assert validate(valid_suite) == []

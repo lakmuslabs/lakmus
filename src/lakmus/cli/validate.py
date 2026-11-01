@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from lakmus.errors import ExitCode, Finding
+from lakmus.scorers import BUILTIN_SCORERS
 from lakmus.suite.loader import SuiteCodeConsent
 from lakmus.suite.loader import validate as validate_suite
 
@@ -70,7 +71,11 @@ def validate(
         typer.secho("--yes and --no-code contradict each other.", err=True, fg=typer.colors.RED)
         raise typer.Exit(ExitCode.USAGE)
 
-    findings = validate_suite(path, run_suite_code=_consent(yes=yes, no_code=no_code))
+    findings = validate_suite(
+        path,
+        run_suite_code=_consent(yes=yes, no_code=no_code),
+        scorers=BUILTIN_SCORERS,
+    )
     _report(path, findings)
     errors = sum(1 for finding in findings if finding.severity == "error")
     raise typer.Exit(ExitCode.USAGE if errors else ExitCode.SUCCESS)

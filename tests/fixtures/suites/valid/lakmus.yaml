@@ -23,8 +23,10 @@ metrics:
   - id: score_gap
     scorer: scorers/pair_gap.py:mean_abs_gap
     group_by: [variable]
+    with: {field: score}
   - id: decision_flip_rate
     scorer: builtin:pair_flip
+    with: {field: decision}
 
 thresholds:
   score_gap: {max: 0.05}

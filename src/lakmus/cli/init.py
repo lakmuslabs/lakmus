@@ -9,6 +9,7 @@ import typer
 from pydantic import TypeAdapter, ValidationError
 
 from lakmus.errors import ExitCode
+from lakmus.scorers import BUILTIN_SCORERS
 from lakmus.suite.loader import GITATTRIBUTES_LINE, MANIFEST_FILENAME, inspect
 from lakmus.suite.models import ALLOWED_LICENCES, FORMAT_VERSION, LanguageTag, SpdxId, SuiteId
 
@@ -49,14 +50,16 @@ cases:
 
 # One entry per thing this suite measures. A metric's scorer is either a built-in
 # (builtin:<name>) or a function in this suite (scorers/<module>.py:<function>).
+# `with` configures it; the accepted names are listed in the format specification.
 metrics:
-  - id: exact_match
-    scorer: builtin:exact_match
+  - id: exact
+    scorer: builtin:exact
+    with: {{expected: expected, normalise: [trim, nfc]}}
 
 # A run fails when a threshold is crossed, so that a suite has a verdict rather than a
 # number someone has to interpret.
 thresholds:
-  exact_match: {{min: 0.9}}
+  exact: {{min: 0.9}}
 
 run:
   repeats: 1
@@ -103,7 +106,7 @@ the date and the selection rule. No real personal data.
 
 | Metric | What it means | Threshold | Why that value |
 | --- | --- | --- | --- |
-| `exact_match` | share of answers matching exactly | min 0.9 | replace with a justified number |
+| `exact` | share of answers matching exactly | min 0.9 | replace with a justified number |
 
 ## Known shortcuts
 
@@ -186,7 +189,7 @@ def init(
     )
     (root / ".gitattributes").write_text(f"{GITATTRIBUTES_LINE}\n", encoding="utf-8")
 
-    findings, _ = inspect(root, run_suite_code=False)
+    findings, _ = inspect(root, run_suite_code=False, scorers=BUILTIN_SCORERS)
     errors = [finding for finding in findings if finding.severity == "error"]
     if errors:
         # The scaffold is generated from a template rather than from the models, so that it can

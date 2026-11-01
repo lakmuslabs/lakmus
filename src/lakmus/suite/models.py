@@ -127,10 +127,18 @@ class CasesSpec(_Strict):
     """`null` means every case."""
 
 
+OptionScalar = str | int | float | bool
+OptionValue = OptionScalar | list[OptionScalar]
+
+
 class MetricSpec(_Strict):
     id: MetricId
     scorer: ScorerRef
     group_by: list[str] = []
+    options: dict[str, OptionValue] = Field(default_factory=dict, alias="with")
+    """What the scorer is configured with: a regex pattern, which case field holds the expected
+    answer, a judge model. Part of `metrics`, so part of `inputs_sha256`: changing a pattern is
+    changing the measurement, and two runs under different patterns are not comparable."""
 
 
 class Threshold(_Strict):
