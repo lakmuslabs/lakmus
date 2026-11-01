@@ -84,6 +84,13 @@ Say what changed, why, which decision record it implements, and how you verified
 logical change. Check suite green. A new runtime dependency is justified in the description, and
 `uv.lock` is committed with it.
 
+## Working with an AI assistant
+
+[AGENTS.md](AGENTS.md) carries the rules above in the form an assistant reads, and this
+repository enables the `lakmus-dev` plugin from
+[lakmuslabs/claude-plugins](https://github.com/lakmuslabs/claude-plugins). A pull request is
+judged on the change, not on how it was written; the rules are the same either way.
+
 ## Reporting a vulnerability
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md).
