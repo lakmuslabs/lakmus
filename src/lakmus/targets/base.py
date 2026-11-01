@@ -12,6 +12,7 @@ too long, content the provider refused, a response that does not parse. One bad 
 a run of five thousand.
 """
 
+import json
 import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -26,7 +27,7 @@ from lakmus.errors import (
     TargetUnavailable,
 )
 from lakmus.results.models import ParameterValue, TargetFingerprint
-from lakmus.targets.pricing import PricingTable
+from lakmus.targets.pricing import ModelPrice, PricingTable
 
 TargetKind = Literal["model", "agent", "mcp"]
 
@@ -34,13 +35,41 @@ _RETRYABLE_STATUSES = frozenset({408, 409, 425, 429})
 _CONFIG_STATUSES = frozenset({401, 403, 404})
 _CASE_STATUSES = frozenset({400, 413, 422})
 
-_CONFIG_FAULT_IN_BODY = re.compile(
+_CONFIG_FAULT = re.compile(
     r"model[_ ]not[_ ]found|unknown model|does not exist"
     r"|invalid[_ ]api[_ ]key|incorrect api key|no such model",
     re.IGNORECASE,
 )
-"""Markers that turn an otherwise case-level 400 into a configuration fault. Deliberately short:
-guessing wrong in this direction ends a run of thousands on one bad case."""
+"""Markers that turn an otherwise case-level 400 into a configuration fault.
+
+Matched against the provider's own error text, never the whole body: providers echo the request,
+and a case whose prompt happens to contain "does not exist" would otherwise end the run.
+"""
+
+_PROVIDER_ERROR_KEYS = ("message", "code", "type", "detail", "error_description")
+
+_CREDENTIAL_STRONG = (
+    r"authorization|x-api-key|api[_-]?key|apikey"
+    r"|access[_-]?token|refresh[_-]?token|bearer"
+)
+"""Names that are a credential wherever they appear, separator or not."""
+
+_CREDENTIAL_WEAK = r"password|passwd|secret|token"
+"""Names that are a credential only when something is assigned to them. A provider message about
+a token budget must survive intact."""
+
+_SCHEME = r"(?:bearer|basic|token|digest)\s+"
+
+_JSON_SECRET = re.compile(
+    rf'(?i)("(?:{_CREDENTIAL_STRONG}|{_CREDENTIAL_WEAK})"\s*:\s*)"[^"]*"',
+)
+_STRONG_PAIR = re.compile(
+    rf"(?i)\b({_CREDENTIAL_STRONG})\b\s*[:=]?\s*(?:{_SCHEME})?[^\s,;\"}}\]]+",
+)
+_WEAK_PAIR = re.compile(
+    rf"(?i)\b({_CREDENTIAL_WEAK})\b\s*[:=]\s*(?:{_SCHEME})?[^\s,;\"}}\]]+",
+)
+_PREFIXED_SECRET = re.compile(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}")
 
 _MAX_MESSAGE = 500
 
@@ -99,6 +128,9 @@ class TargetOutput(_Strict):
     trace: tuple[Step, ...] = ()
     usage: Usage | None = None
     cost_usd: float | None = None
+    price: ModelPrice | None = None
+    """The price that produced `cost_usd`. Carried so that the run file can record the date the
+    figure was true on without re-deriving which entry was used."""
     error: TargetError | None = None
 
     @model_validator(mode="after")
@@ -158,27 +190,44 @@ class Target(Protocol):
 
 
 def redact(text: str, *, limit: int = _MAX_MESSAGE) -> str:
-    """Shorten a provider message and strip anything that looks like a key.
+    """Shorten a provider message and strip anything that looks like a credential.
 
-    A provider error body is quoted into the run file, and bodies have been known to echo the
-    request, headers included.
+    A provider error body is quoted into the run file, and bodies echo the request — headers
+    included. Three shapes are covered, because a provider will use any of them: a JSON string
+    value, a header or assignment, and a key recognisable by its own prefix. An authentication
+    scheme (`Bearer`, `Basic`) is skipped rather than mistaken for the secret after it.
     """
     collapsed = " ".join(text.split())
-    collapsed = re.sub(r"\b(sk|rk|pk)-[A-Za-z0-9_-]{8,}", "[redacted]", collapsed)
-    collapsed = re.sub(
-        # The optional `bearer` matters: without it, "Authorization: Bearer abc.def" redacted the
-        # word Bearer and left the token.
-        # Not a bare "token": provider messages are full of token limits and token budgets, and
-        # mangling those costs more than it protects.
-        r"(?i)\b(authorization|x-api-key|api[_-]?key|access[_-]?token"
-        r"|refresh[_-]?token|bearer)\b\s*[:=]?\s*"
-        r"(?:bearer\s+)?\S+",
-        r"\1 [redacted]",
-        collapsed,
-    )
+    collapsed = _JSON_SECRET.sub(r'\1"[redacted]"', collapsed)
+    collapsed = _STRONG_PAIR.sub(r"\1 [redacted]", collapsed)
+    collapsed = _WEAK_PAIR.sub(r"\1 [redacted]", collapsed)
+    collapsed = _PREFIXED_SECRET.sub("[redacted]", collapsed)
     if len(collapsed) <= limit:
         return collapsed
     return f"{collapsed[:limit]}..."
+
+
+def provider_message(body: str) -> str:
+    """The provider's own error text, without the request it may have echoed.
+
+    A body is usually `{"error": {"message": ...}}`. Anything that is not JSON is returned whole,
+    since there is no structure to separate the provider's words from a quoted prompt.
+    """
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return body
+    if not isinstance(payload, dict):
+        return body
+
+    error = payload.get("error")
+    if isinstance(error, str):
+        return error
+    candidates = error if isinstance(error, dict) else payload
+    parts = [
+        str(candidates[key]) for key in _PROVIDER_ERROR_KEYS if isinstance(candidates.get(key), str)
+    ]
+    return " ".join(parts) if parts else ""
 
 
 def retry_after_seconds(headers: Mapping[str, str], *, now: datetime | None = None) -> float | None:
@@ -219,6 +268,14 @@ def raise_or_describe(
     headers = headers or {}
     message = redact(body)
 
+    if 300 <= status_code < 400:
+        location = (headers.get("location") or headers.get("Location") or "unknown").strip()
+        raise TargetConfigError(
+            f"{adapter}: HTTP {status_code}: the endpoint redirects to {location!r}. "
+            f"Point the target at the final URL; redirects are not followed, because a redirect "
+            f"can move a request carrying a key to another host."
+        )
+
     if status_code in _CONFIG_STATUSES:
         raise TargetConfigError(f"{adapter}: HTTP {status_code}: {message}")
 
@@ -232,9 +289,18 @@ def raise_or_describe(
         raise TargetUnavailable(f"{adapter}: HTTP {status_code}: {message}")
 
     if status_code in _CASE_STATUSES:
-        if _CONFIG_FAULT_IN_BODY.search(body):
+        if names_a_configuration_fault(body):
             raise TargetConfigError(f"{adapter}: HTTP {status_code}: {message}")
         return TargetError(kind="bad_request", message=message, status_code=status_code)
 
     # Anything else in the 4xx range is this case's problem until a provider proves otherwise.
     return TargetError(kind="bad_request", message=message, status_code=status_code)
+
+
+def names_a_configuration_fault(body: str) -> bool:
+    """Whether a 4xx body says the fault is the configuration rather than this case.
+
+    Read from the provider's own error text only. Searching the whole body let a case prompt
+    containing "does not exist" end a run of thousands.
+    """
+    return bool(_CONFIG_FAULT.search(provider_message(body)))

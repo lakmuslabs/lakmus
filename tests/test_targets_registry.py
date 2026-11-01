@@ -132,3 +132,32 @@ def test_every_adapter_satisfies_the_protocol() -> None:
         assert callable(target.invoke)
         assert callable(target.teardown)
         assert callable(target.fingerprint)
+
+
+@pytest.mark.parametrize("name", ["api_key", "authorization", "secret", "access_token"])
+def test_a_credential_cannot_be_passed_as_a_parameter(name: str) -> None:
+    """It would reach every request body and the published fingerprint."""
+    with pytest.raises(TargetConfigError, match=r"through the environment"):
+        parse_parameter(f"{name}=sk-live-1")
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf"])
+def test_a_parameter_that_is_not_a_finite_number_is_refused(raw: str) -> None:
+    """A run file has no way to write one, and the refusal belongs here, not in a validator."""
+    with pytest.raises(TargetConfigError, match="not a finite number"):
+        parse_parameter(f"temperature={raw}")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "HTTPS://host/v1#llama-3",
+        "openai-compatible:HTTPS://host/v1#llama-3",
+        "HTTP://localhost:8000/agent",
+    ],
+)
+def test_an_endpoint_written_in_upper_case_is_not_taken_for_a_model(text: str) -> None:
+    """The silent fallback the decision record rules out: it would fail later with 'no endpoint'."""
+    reference = parse_target(text)
+
+    assert reference.identity.lower().startswith(("http://", "https://"))

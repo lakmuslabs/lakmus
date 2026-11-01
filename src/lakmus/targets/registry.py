@@ -5,6 +5,7 @@ not implemented yet, and `create` is what refuses it, with the list of what does
 whose prefix is not an adapter is never silently treated as a model name.
 """
 
+import math
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import Any, ClassVar
 from urllib.parse import urlsplit, urlunsplit
 
 from lakmus.errors import TargetConfigError
-from lakmus.results.models import ParameterValue
+from lakmus.results.models import ParameterValue, names_a_credential
 from lakmus.targets.anthropic import AnthropicTarget
 from lakmus.targets.base import Target
 from lakmus.targets.openai_compatible import (
@@ -53,7 +54,7 @@ def parse_target(text: str) -> TargetReference:
     if not candidate:
         raise TargetConfigError("a target is required: --target <adapter>:<model-or-endpoint>")
 
-    if candidate.startswith(URL_PREFIXES):
+    if _is_url(candidate):
         identity, model = _split_fragment(candidate)
         return TargetReference(adapter="http", identity=identity, model=model)
 
@@ -69,7 +70,7 @@ def parse_target(text: str) -> TargetReference:
     if not rest:
         raise TargetConfigError(f"{text!r} names the {adapter} adapter but nothing to run against")
 
-    if rest.startswith(URL_PREFIXES):
+    if _is_url(rest):
         identity, model = _split_fragment(rest)
         return TargetReference(adapter=adapter, identity=identity, model=model)
     return TargetReference(adapter=adapter, identity=rest)
@@ -97,6 +98,16 @@ def parse_parameter(text: str) -> tuple[str, ParameterValue]:
         raise TargetConfigError(
             f"-P {name}: only a string, number or boolean is accepted, not {type(value).__name__}. "
             f"A parameter is recorded in the target fingerprint, which holds scalars."
+        )
+    if isinstance(value, float) and not math.isfinite(value):
+        raise TargetConfigError(
+            f"-P {name}: {raw.strip()!r} is not a finite number, and a run file has no way to "
+            f"write one."
+        )
+    if names_a_credential(name):
+        raise TargetConfigError(
+            f"-P {name}: a parameter is sent in every request and recorded in the published "
+            f"fingerprint. Pass a credential through the environment variable the adapter names."
         )
     return name, value
 
@@ -149,6 +160,16 @@ def _split_fragment(url: str) -> tuple[str, str | None]:
     parts = urlsplit(url)
     identity = urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
     return identity, parts.fragment or None
+
+
+def _is_url(text: str) -> bool:
+    """Whether a target names an endpoint rather than a model.
+
+    Case-insensitive: the rest of the project lower-cases a scheme, and `HTTPS://host/v1` taken
+    for a model name would fail later with "no endpoint", which is the silent fallback the
+    decision record rules out.
+    """
+    return text[:8].lower().startswith(URL_PREFIXES)
 
 
 def _unquote(text: str) -> str:

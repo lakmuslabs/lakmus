@@ -47,6 +47,10 @@ specification and in each run file. Changes to either are called out here under
 - `pricing.toml`: exact matching on adapter and model, no prefix matching, and every entry
   carrying the date it was true on and its source. The bundled table is empty on purpose, so an
   unpriced model reports no cost rather than a figure nobody can source.
+- Provider messages are quoted into a run with credentials removed in every shape a provider
+  uses them: a JSON value, a header, an assignment, or a key recognisable by its prefix. A
+  message about token limits survives intact. A redirect, and a 200 carrying an error object,
+  end a run instead of being recorded against every case.
 - Manifest models for format 0.1, and the JSON Schema generated from them at
   `lakmus/suite/schemas/suite-0.1.json`.
 - Two suite digests: `inputs_sha256`, which changes only when a measurement could change and

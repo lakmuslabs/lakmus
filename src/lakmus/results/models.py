@@ -91,6 +91,15 @@ def sanitise_identity(identity: str) -> str:
     return f"{authority}{host}{parts.path}{fragment}"
 
 
+def names_a_credential(name: str) -> bool:
+    """Whether a parameter name has no business in a published record.
+
+    Shared so that the command line can refuse one before a run is paid for, rather than leaving
+    the fingerprint to refuse it after.
+    """
+    return bool(_SECRET_NAME.search(name))
+
+
 def canonical_parameter(value: ParameterValue) -> str:
     """One spelling per value, so that a digest is reproducible outside Python.
 

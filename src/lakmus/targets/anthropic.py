@@ -6,7 +6,7 @@ response shape. What it does share is the lifecycle in `HttpModelTarget`.
 
 from typing import Any, ClassVar
 
-from lakmus.targets.base import RenderedCase, TargetConfig, TargetError, Usage, redact
+from lakmus.targets.base import RenderedCase, TargetConfig, TargetError, Usage
 from lakmus.targets.http_model import HttpModelTarget, Reading
 
 API_VERSION = "2023-06-01"
@@ -73,16 +73,8 @@ class AnthropicTarget(HttpModelTarget):
             for block in blocks
             if isinstance(block, dict) and block.get("type") == "text" and "text" in block
         )
-        if not text:
-            return Reading(
-                declared_version=declared_version,
-                usage=usage,
-                error=TargetError(
-                    kind="invalid_response",
-                    message=f"no text block in the response: {redact(str(blocks))}",
-                ),
-            )
-
+        # An empty join means no text block. Classifying that is the shared lifecycle's job, so
+        # that an empty answer means the same thing whichever adapter produced it.
         return Reading(text=text, usage=usage, declared_version=declared_version)
 
 

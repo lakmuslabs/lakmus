@@ -5,6 +5,7 @@ No network: respx answers every request. The failures are the point — an adapt
 when the provider does is the one that loses a five-thousand-case run at case four thousand.
 """
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -261,8 +262,9 @@ async def test_every_parameter_sent_is_in_the_fingerprint() -> None:
     sent = route.calls.last.request.read().decode()
 
     assert fingerprint.parameters == parameters
-    for name in parameters:
-        assert name in sent
+    body = json.loads(sent)
+    for name, value in parameters.items():
+        assert body[name] == value, f"{name} was not sent as written"
     assert fingerprint.identity == "https://api.openai.com/v1#gpt-x"
 
 
@@ -424,3 +426,150 @@ async def test_anthropic_without_a_key_fails_at_setup(monkeypatch: pytest.Monkey
 
     with pytest.raises(TargetConfigError, match=r"\$ANTHROPIC_API_KEY is not set"):
         await AnthropicTarget().setup(TargetConfig(identity="claude-x"))
+
+
+# --- what must fail before a run is paid for --------------------------------------------------
+
+
+async def test_streaming_is_refused_at_setup() -> None:
+    """A streamed body is not JSON, so every case would be recorded as unreadable."""
+    with pytest.raises(TargetConfigError, match="stream is not supported"):
+        await OpenAITarget().setup(TargetConfig(identity="gpt-x", parameters={"stream": True}))
+
+
+@pytest.mark.parametrize("name", ["api_key", "authorization", "access_token", "password"])
+async def test_a_parameter_named_like_a_credential_is_refused_at_setup(name: str) -> None:
+    """It would be sent in every request body and only refused by the fingerprint at the end."""
+    with pytest.raises(TargetConfigError, match="carries no credential"):
+        await OpenAITarget().setup(TargetConfig(identity="gpt-x", parameters={name: "sk-live-1"}))
+
+
+@respx.mock
+async def test_setting_up_twice_does_not_abandon_the_first_connection() -> None:
+    respx.post(OPENAI_URL).mock(return_value=httpx.Response(200, json=_chat_completion()))
+    target = OpenAITarget()
+    config = TargetConfig(identity="gpt-x")
+
+    await target.setup(config)
+    first = target._client
+    await target.setup(config)
+    try:
+        assert first is not None
+        assert first.is_closed
+    finally:
+        await target.teardown()
+
+
+@respx.mock
+async def test_a_redirect_ends_the_run_rather_than_every_case() -> None:
+    url = "https://llama.internal/v1/chat/completions"
+    respx.post(url).mock(
+        return_value=httpx.Response(308, headers={"location": "https://llama.internal/v2"})
+    )
+
+    with pytest.raises(TargetConfigError, match="redirects to"):
+        await _invoke(
+            OpenAICompatibleTarget(),
+            TargetConfig(identity="https://llama.internal/v1", model="llama-3"),
+        )
+
+
+@respx.mock
+async def test_an_endpoint_written_in_upper_case_is_still_an_endpoint() -> None:
+    respx.post("https://llama.internal/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_chat_completion())
+    )
+
+    output = await _invoke(
+        OpenAICompatibleTarget(),
+        TargetConfig(identity="HTTPS://llama.internal/v1", model="llama-3"),
+    )
+
+    assert output.content == "Oui"
+
+
+# --- a proxy that answers 200 with a failure in the body --------------------------------------
+
+
+@respx.mock
+async def test_a_two_hundred_carrying_a_configuration_fault_ends_the_run() -> None:
+    """Proxies in front of a model do this, and it used to be recorded against every case."""
+    respx.post(OLLAMA_URL).mock(
+        return_value=httpx.Response(
+            200, json={"error": {"message": "model 'llama-99' does not exist"}}
+        )
+    )
+
+    with pytest.raises(TargetConfigError):
+        await _invoke(OllamaTarget(), TargetConfig(identity="llama-99"))
+
+
+@respx.mock
+async def test_a_two_hundred_carrying_a_case_failure_is_recorded() -> None:
+    respx.post(OLLAMA_URL).mock(
+        return_value=httpx.Response(200, json={"error": {"message": "context too long"}})
+    )
+
+    output = await _invoke(OllamaTarget(), TargetConfig(identity="mistral-small"))
+
+    assert output.error is not None
+    assert output.error.kind == "bad_request"
+
+
+# --- an empty answer means the same thing whichever adapter produced it ------------------------
+
+
+@respx.mock
+async def test_an_empty_completion_is_not_an_answer() -> None:
+    respx.post(OPENAI_URL).mock(return_value=httpx.Response(200, json=_chat_completion("")))
+
+    output = await _invoke(OpenAITarget(), TargetConfig(identity="gpt-x"))
+
+    assert output.error is not None
+    assert output.error.kind == "invalid_response"
+
+
+@respx.mock
+async def test_anthropic_with_no_text_block_agrees_with_the_others() -> None:
+    """The same provider behaviour must not move the denominator of a metric by adapter."""
+    respx.post(ANTHROPIC_URL).mock(
+        return_value=httpx.Response(200, json=_message(content=[{"type": "thinking"}]))
+    )
+
+    output = await _invoke(AnthropicTarget(), TargetConfig(identity="claude-x"))
+
+    assert output.error is not None
+    assert output.error.kind == "invalid_response"
+
+
+# --- the price that produced the figure -------------------------------------------------------
+
+
+@respx.mock
+async def test_a_cost_arrives_with_the_price_that_produced_it(tmp_path: Path) -> None:
+    """The run file records the date a price was true on, so the figure cannot be re-derived."""
+    path = tmp_path / "pricing.toml"
+    path.write_text(
+        '[[model]]\nadapter = "openai"\nmodel = "gpt-x"\n'
+        "input_per_mtok_usd = 2.0\noutput_per_mtok_usd = 10.0\n"
+        'as_of = 2026-10-01\nsource = "https://example.com/pricing"\n',
+        encoding="utf-8",
+    )
+    respx.post(OPENAI_URL).mock(return_value=httpx.Response(200, json=_chat_completion()))
+
+    output = await _invoke(
+        OpenAITarget(), TargetConfig(identity="gpt-x", pricing=pricing_module.load(path))
+    )
+
+    assert output.price is not None
+    assert output.price.as_of == date(2026, 10, 1)
+    assert output.price.source == "https://example.com/pricing"
+
+
+@respx.mock
+async def test_without_a_price_there_is_no_price_to_record() -> None:
+    respx.post(OPENAI_URL).mock(return_value=httpx.Response(200, json=_chat_completion()))
+
+    output = await _invoke(OpenAITarget(), TargetConfig(identity="gpt-x"))
+
+    assert (output.cost_usd, output.price) == (None, None)

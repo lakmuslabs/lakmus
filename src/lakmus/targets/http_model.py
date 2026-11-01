@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 import httpx
 
 from lakmus.errors import TargetConfigError, TargetUnavailable
-from lakmus.results.models import TargetFingerprint
+from lakmus.results.models import TargetFingerprint, names_a_credential
 from lakmus.targets.base import (
     RenderedCase,
     TargetConfig,
@@ -25,9 +25,12 @@ from lakmus.targets.base import (
     TargetKind,
     TargetOutput,
     Usage,
+    names_a_configuration_fault,
+    provider_message,
     raise_or_describe,
     redact,
 )
+from lakmus.targets.pricing import ModelPrice
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +63,10 @@ class HttpModelTarget:
     # --- lifecycle ---------------------------------------------------------------------------
 
     async def setup(self, config: TargetConfig) -> None:
+        if self._client is not None:
+            # Calling setup twice used to abandon the first client with its connections open.
+            await self.teardown()
+        self._reject_unsupported(config)
         self._config = config
         self._base_url = self._resolve_base_url(config)
         self._model = self._resolve_model(config)
@@ -107,7 +114,7 @@ class HttpModelTarget:
             raise TargetUnavailable(f"{self.adapter}: {redact(str(exc))}") from exc
         latency_ms = round((time.perf_counter() - started) * 1000)
 
-        if response.status_code >= 400:
+        if response.status_code >= 300:
             # Raises for anything run-level or retryable; returns a record for this case alone.
             error = raise_or_describe(
                 status_code=response.status_code,
@@ -124,6 +131,18 @@ class HttpModelTarget:
         if not isinstance(payload, dict):
             return self._invalid(response.text, latency_ms, "the body is not a JSON object")
 
+        if "error" in payload:
+            # A proxy in front of a model answers 200 and puts the failure in the body. Without
+            # this, an unknown model would be recorded against every case instead of ending the
+            # run once.
+            text = provider_message(response.text)
+            if names_a_configuration_fault(response.text):
+                raise TargetConfigError(f"{self.adapter}: {redact(text)}")
+            return TargetOutput(
+                error=TargetError(kind="bad_request", message=redact(text or response.text)),
+                latency_ms=latency_ms,
+            )
+
         return self._interpret(payload, case, latency_ms)
 
     def _interpret(
@@ -134,8 +153,13 @@ class HttpModelTarget:
             self._declared_version = reading.declared_version
         if reading.error is not None:
             return TargetOutput(error=reading.error, latency_ms=latency_ms)
+        if not reading.text:
+            # One rule for every adapter: a model that returned nothing did not answer. Leaving
+            # this to each adapter had `openai` recording a success and `anthropic` an error for
+            # the same provider behaviour, which moves the denominator of every metric.
+            return self._invalid("", latency_ms, "the answer is empty")
 
-        content: str | dict[str, Any] = reading.text or ""
+        content: str | dict[str, Any] = reading.text
         if case.expects_json:
             try:
                 parsed = json.loads(reading.text or "")
@@ -149,11 +173,13 @@ class HttpModelTarget:
                 )
             content = parsed
 
+        priced = self._cost(reading.usage)
         return TargetOutput(
             content=content,
             latency_ms=latency_ms,
             usage=reading.usage,
-            cost_usd=self._cost(reading.usage),
+            cost_usd=None if priced is None else priced[0],
+            price=None if priced is None else priced[1],
         )
 
     # --- what a subclass provides -------------------------------------------------------------
@@ -172,9 +198,7 @@ class HttpModelTarget:
         return {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     def _resolve_base_url(self, config: TargetConfig) -> str:
-        candidate = config.base_url or (
-            config.identity if config.identity.startswith(("http://", "https://")) else None
-        )
+        candidate = config.base_url or (config.identity if _is_url(config.identity) else None)
         resolved = candidate or self.default_base_url
         if not resolved:
             raise TargetConfigError(
@@ -184,9 +208,7 @@ class HttpModelTarget:
         return resolved.rstrip("/")
 
     def _resolve_model(self, config: TargetConfig) -> str:
-        resolved = config.model or (
-            None if config.identity.startswith(("http://", "https://")) else config.identity
-        )
+        resolved = config.model or (None if _is_url(config.identity) else config.identity)
         if not resolved:
             raise TargetConfigError(
                 f"{self.adapter}: no model. Name it after a # in the target "
@@ -206,20 +228,44 @@ class HttpModelTarget:
             )
         return value or None
 
-    def _cost(self, usage: Usage | None) -> float | None:
+    def _cost(self, usage: Usage | None) -> tuple[float, ModelPrice] | None:
         config = self._require_config()
         if usage is None or config.pricing is None:
             return None
-        priced = config.pricing.cost_usd(
+        return config.pricing.cost_usd(
             self.adapter, self._model, tokens_in=usage.tokens_in, tokens_out=usage.tokens_out
         )
-        return None if priced is None else priced[0]
 
-    def _invalid(self, body: str, latency_ms: int, why: str) -> TargetOutput:
+    def _invalid(
+        self, body: str, latency_ms: int, why: str, *, status_code: int | None = None
+    ) -> TargetOutput:
         return TargetOutput(
-            error=TargetError(kind="invalid_response", message=f"{why}: {redact(body)}"),
+            error=TargetError(
+                kind="invalid_response",
+                message=f"{why}: {redact(body)}" if body else why,
+                status_code=status_code,
+            ),
             latency_ms=latency_ms,
         )
+
+    def _reject_unsupported(self, config: TargetConfig) -> None:
+        """Refuse what cannot work, before a run is paid for.
+
+        A streamed response is not JSON, so every case would be recorded as unreadable. A
+        parameter named like a credential would be sent in every request body and only refused by
+        the fingerprint at the end of the run.
+        """
+        if config.parameters.get("stream"):
+            raise TargetConfigError(
+                f"{self.adapter}: stream is not supported. A streamed body is not JSON, so every "
+                f"case would be recorded as unreadable."
+            )
+        named = sorted(name for name in config.parameters if names_a_credential(name))
+        if named:
+            raise TargetConfigError(
+                f"{self.adapter}: a parameter is sent in every request and recorded in the "
+                f"fingerprint, so it carries no credential: remove " + ", ".join(named)
+            )
 
     def _require_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -230,3 +276,8 @@ class HttpModelTarget:
         if self._config is None:
             raise TargetConfigError(f"{self.adapter}: setup() has not run")
         return self._config
+
+
+def _is_url(text: str) -> bool:
+    """Case-insensitive, so that `HTTPS://host/v1` is an endpoint and not a model name."""
+    return text[:8].lower().startswith(("http://", "https://"))
